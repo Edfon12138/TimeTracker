@@ -39,3 +39,16 @@ def extract_domain_from_title(window_title: str) -> str | None:
             if parts[0].strip():
                 return parts[0].strip()
     return None
+
+_VIDEO_KEYWORDS = [
+    "youtube", "netflix", "bilibili", "twitch", "disneyplus",
+    "hbo", "crunchyroll", "plex", "prime video", "hulu",
+    "放映", "播放", "视频", "直播", "影视", "追剧",
+    "弹幕", "正在播放", "vod", "stream", "mpv",
+    "potplayer", "vlc", "完美解码", "kmplayer",
+]
+
+def match_video_keywords(title: str) -> bool:
+    """Check if a window title suggests video playback."""
+    tl = title.lower()
+    return any(kw in tl for kw in _VIDEO_KEYWORDS)
