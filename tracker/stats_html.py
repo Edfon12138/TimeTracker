@@ -205,6 +205,10 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
 .mo-box .tbl input:focus,.mo-box .tbl select:focus{outline:none;border-color:#D4956B}
 
 /* ── Timeline view ── */
+.sub-tabs{display:flex;gap:4px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #2E3039}
+.stb{padding:4px 14px;font-size:12px;font-family:inherit;color:#9B958A;cursor:pointer;border:none;background:transparent;border-radius:4px;transition:all .1s}
+.stb:hover{color:#EAE4D9;background:#24262E}
+.stb.active{background:#2E3039;color:#D4956B;font-weight:500}
 .tl-container{width:100%;user-select:none}
 .tl-header{position:relative;height:30px;margin-bottom:4px;overflow:hidden}
 .tl-ruler{position:absolute;left:0;top:0;height:30px;width:2400px;transform-origin:left center;border-bottom:1px solid #2E3039}
@@ -240,11 +244,15 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
     <div class="tab active" data-r="today">今日</div>
     <div class="tab" data-r="week">本周</div>
     <div class="tab" data-r="month">本月</div>
-    <div class="tab" data-r="timeline">时间轴</div>
     <div class="tab-spacer"></div>
     <button class="btn-gear" id="gearBtn" title="设置">&#9881;</button>
   </div>
   <div class="content">
+    <div class="sub-tabs" id="viewTabs">
+      <button class="stb active" data-v="stats">统计</button>
+      <button class="stb" data-v="list">时间线</button>
+      <button class="stb" data-v="timeline">时间轴</button>
+    </div>
     <div id="statsView">
       <div class="toolbar">
         <span class="tl">视图</span>
@@ -258,10 +266,17 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
         <div class="chart-box"><canvas id="chartCanvas"></canvas></div>
         <div class="breakdown" id="breakdownList"></div>
       </div>
-      <div class="sl">时间线</div>
-      <div id="timeline"></div>
       <div class="footer">
         <button class="btn" id="exportBtn">导出 CSV</button>
+      </div>
+    </div>
+
+    <!-- List view -->
+    <div id="listView" style="display:none">
+      <div class="sl">时间线</div>
+      <div id="timelineList"></div>
+      <div class="footer" style="margin-top:16px">
+        <button class="btn" id="exportBtn2">导出 CSV</button>
       </div>
     </div>
 
@@ -304,7 +319,7 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
 <script>
 var DATA = __EMBEDDED_DATA__;
 var CC = {'工作':'#7BA78E','娱乐':'#D4956B','浏览':'#7B9EC7','通讯':'#A78BB5','系统':'#6B6B6B','其他':'#5A5A5A'};
-var chart = null, state = {range:'today',view:'cat',ctype:'donut',drill:null,hlKey:null};
+var chart = null, state = {range:'today', view:'cat', ctype:'donut', drill:null, hlKey:null, subTab:'stats'};
 
 function gf(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?h+'h '+m+'m':m+'m';}
 
@@ -460,10 +475,12 @@ function renderList(){
   });
 }
 
-/* ── Timeline ── */
+/* ── Timeline list ── */
 function renderTL(){
   var tl=DATA.timeline||[];
-  document.getElementById('timeline').innerHTML=tl.map(function(r){
+  var el=document.getElementById('timelineList');
+  if(!el)return;
+  el.innerHTML=tl.map(function(r){
     var s=r.duration,ds=s>=3600?Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m':Math.floor(s/60)+'m';
     var cc=CC[r.category]||'#888';
     return '<div class="tr"><span class="tt">'+(r.started_at||'').slice(11,16)+'</span>'+(r.icon_uri?'<img class="pgm-icon" src="'+r.icon_uri+'" alt="" style="width:18px;height:18px">':'')+'<span class="ttl">'+r.process+' &mdash; '+(r.window_title||'').slice(0,30)+'</span><span class="td">'+ds+'</span><span class="tc" style="background:'+cc+'22;color:'+cc+'">'+r.category+'</span></div>';
@@ -702,22 +719,41 @@ document.getElementById('tlZoomIn')?.addEventListener('click',function(){
 });
 
 /* ── Events ── */
-/* ── Time range switching — also handles timeline tab ── */
+/* ── Time range switching ── */
 document.getElementById('timeTabs').addEventListener('click',function(e){
   var t=e.target.closest('.tab');if(!t||!t.dataset.r)return;
   document.querySelectorAll('#timeTabs .tab').forEach(function(x){x.classList.remove('active');});
   t.classList.add('active');
-  if(t.dataset.r==='timeline'){
-    document.getElementById('statsView').style.display='none';
-    document.getElementById('timelineView').style.display='block';
-    renderTimelineChart();
-  }else{
-    document.getElementById('statsView').style.display='';
-    document.getElementById('timelineView').style.display='none';
-    state.range=t.dataset.r;state.drill=null;state.hlKey=null;
-    document.getElementById('bread').style.display='none';refresh();
-  }
+  state.range=t.dataset.r;state.drill=null;state.hlKey=null;
+  document.getElementById('bread').style.display='none';
+  switchView(state.subTab);
 });
+
+/* ── View sub-tab switching: 统计 / 时间线 / 时间轴 ── */
+document.getElementById('viewTabs').addEventListener('click',function(e){
+  var b=e.target.closest('.stb');if(!b||!b.dataset.v)return;
+  document.querySelectorAll('#viewTabs .stb').forEach(function(x){x.classList.remove('active');});
+  b.classList.add('active');
+  state.subTab=b.dataset.v;
+  switchView(state.subTab);
+});
+
+function switchView(view){
+  var sv=document.getElementById('statsView');
+  var lv=document.getElementById('listView');
+  var tv=document.getElementById('timelineView');
+  sv.style.display='none';lv.style.display='none';tv.style.display='none';
+  if(view==='stats'){
+    sv.style.display='';
+    refresh();
+  }else if(view==='list'){
+    lv.style.display='';
+    renderTL();
+  }else if(view==='timeline'){
+    tv.style.display='';
+    renderTimelineChart();
+  }
+}
 document.querySelector('#app .toolbar').addEventListener('click',function(e){
   var b=e.target.closest('.tb');if(!b)return;
   b.parentElement.querySelectorAll('.tb').forEach(function(x){x.classList.remove('active');});b.classList.add('active');
@@ -725,11 +761,6 @@ document.querySelector('#app .toolbar').addEventListener('click',function(e){
   if(b.dataset.c){state.ctype=b.dataset.c;refresh();}
 });
 document.getElementById('bread').onclick=function(){state.drill=null;this.style.display='none';refresh();};
-document.getElementById('exportBtn').onclick=function(){
-  var rows=DATA.timeline||[],csv='﻿进程,窗口标题,分类,开始时间,时长(秒)\n';
-  rows.forEach(function(r){csv+=r.process+','+r.window_title+','+r.category+','+r.started_at+','+r.duration+'\n';});
-  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='time_export.csv';a.click();
-};
 
 /* ── Settings: editable rules ── */
 function openSettings(){
@@ -769,7 +800,17 @@ document.getElementById('saveConfigBtn').onclick=function(){
     });
 };
 
-refresh();
+switchView('stats');
+
+/* Export CSV for both views */
+document.getElementById('exportBtn').onclick=exportCSV;
+var eb2=document.getElementById('exportBtn2');if(eb2)eb2.onclick=exportCSV;
+
+function exportCSV(){
+  var rows=DATA.timeline||[],csv='\ufeff\u8fdb\u7a0b,\u7a97\u53e3\u6807\u9898,\u5206\u7c7b,\u5f00\u59cb\u65f6\u95f4,\u65f6\u957f(\u79d2)\n';
+  rows.forEach(function(r){csv+=r.process+','+r.window_title+','+r.category+','+r.started_at+','+r.duration+'\n';});
+  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='time_export.csv';a.click();
+}
 </script>
 </body>
 </html>"""

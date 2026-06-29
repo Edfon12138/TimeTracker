@@ -1,11 +1,16 @@
 """SQLite database: init, CRUD, aggregates, cleanup."""
-import sqlite3, os, time, threading
+import sqlite3, os, sys, time, threading
 from datetime import datetime, timedelta
 
 _local = threading.local()
 
+def _base_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
 def _db_path():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracker.db")
+    return os.path.join(_base_dir(), "tracker.db")
 
 def _get_conn(path=None):
     if path is None:

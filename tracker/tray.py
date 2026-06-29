@@ -1,22 +1,28 @@
-"""System tray icon with clock-style icon and right-click menu."""
+"""System tray icon with SVG clock icon and right-click menu."""
 from PySide6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QAction
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QAction
+from PySide6.QtCore import Qt, QByteArray, QRectF
+from PySide6.QtSvg import QSvgRenderer
+
+CLOCK_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path d="M12.5 7.25a.75.75 0 0 0-1.5 0v5.5c0 .27.144.518.378.651l3.5 2a.75.75 0 0 0 .744-1.302L12.5 12.315V7.25Z"/>
+  <path d="M12 1c6.075 0 11 4.925 11 11s-4.925 11-11 11S1 18.075 1 12 5.925 1 12 1ZM2.5 12a9.5 9.5 0 0 0 9.5 9.5 9.5 9.5 0 0 0 9.5-9.5A9.5 9.5 0 0 0 12 2.5 9.5 9.5 0 0 0 2.5 12Z"/>
+  {pause}
+</svg>"""
+
+PAUSE_SVG = '<path d="M15 8a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z"/>' \
+            '<path d="M19 8a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z"/>'
+
 
 def _make_icon(recording=True):
+    svg = CLOCK_SVG.replace("{pause}", "" if recording else PAUSE_SVG)
+    renderer = QSvgRenderer(QByteArray(svg.encode()))
     pm = QPixmap(32, 32); pm.fill(Qt.transparent)
-    p = QPainter(pm); p.setRenderHint(QPainter.Antialiasing)
-    c = 16; r = 14
-    p.setPen(QPen(QColor("#EAE4D9"), 2)); p.setBrush(Qt.NoBrush)
-    p.drawEllipse(c-r, c-r, r*2, r*2)
-    p.setPen(QPen(QColor("#EAE4D9"), 2.5)); p.drawLine(c, c, c+5, c-5)
-    p.setPen(QPen(QColor("#D4956B"), 2)); p.drawLine(c, c, c, c-9)
-    p.setBrush(QColor("#D4956B")); p.setPen(Qt.NoPen)
-    p.drawEllipse(c-2, c-2, 4, 4)
-    if not recording:
-        p.setPen(QPen(QColor("#E85D75"), 2.5))
-        p.drawLine(c-10, c-8, c-10, c+8); p.drawLine(c+10, c-8, c+10, c+8)
-    p.end(); return QIcon(pm)
+    p = QPainter(pm)
+    renderer.render(p, QRectF(4, 4, 24, 24))
+    p.end()
+    return QIcon(pm)
+
 
 class TrayController:
     def __init__(self, app):

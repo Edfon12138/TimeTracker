@@ -10,8 +10,7 @@ import config as cfg, storage, monitor, idle_detector, classifier, tray, stats_h
 class TimeTracker:
     def __init__(self, app):
         self._app = app; self._config = cfg.load_config(); self._paused = False
-        db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracker.db")
-        storage.init_db(db)
+        storage.init_db()
         if self._config.get("retention_days", 90) > 0:
             storage.cleanup_old_data(self._config["retention_days"])
         storage.save_rules_to_db(self._config.get("rules", []))
@@ -51,7 +50,8 @@ class TimeTracker:
         stats_html.generate()
 
     def _open_settings(self):
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        config_path = cfg._config_path() if hasattr(cfg, '_config_path') else \
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
         if os.path.exists(config_path):
             os.startfile(config_path)
 
