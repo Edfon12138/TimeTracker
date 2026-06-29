@@ -4,6 +4,6 @@ __pycache__/
 *.db
 dist/
 build/
-*.spec
+
 venv/
 .pytest_cache/

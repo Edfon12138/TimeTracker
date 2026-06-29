@@ -26,18 +26,20 @@ class TrayController:
         self._tray.setToolTip("时间追踪器 · 启动中...")
         self._menu = QMenu()
         self._stats_a = QAction("打开统计面板"); self._menu.addAction(self._stats_a)
+        self._settings_a = QAction("设置"); self._menu.addAction(self._settings_a)
         self._menu.addSeparator()
         self._pause_a = QAction("暂停记录"); self._menu.addAction(self._pause_a)
         self._menu.addSeparator()
         self._exit_a = QAction("退出"); self._menu.addAction(self._exit_a)
         self._tray.setContextMenu(self._menu)
-        self._cb_open = None; self._cb_pause = None; self._cb_exit = None
+        self._cb_open = None; self._cb_settings = None; self._cb_pause = None; self._cb_exit = None
         self._stats_a.triggered.connect(lambda: self._cb_open() if self._cb_open else None)
+        self._settings_a.triggered.connect(lambda: self._cb_settings() if self._cb_settings else None)
         self._pause_a.triggered.connect(lambda: self._cb_pause() if self._cb_pause else None)
         self._exit_a.triggered.connect(lambda: (self._cb_exit() if self._cb_exit else None, app.quit()))
 
-    def set_callbacks(self, on_open_stats=None, on_toggle_pause=None, on_exit=None):
-        self._cb_open = on_open_stats; self._cb_pause = on_toggle_pause; self._cb_exit = on_exit
+    def set_callbacks(self, on_open_stats=None, on_open_settings=None, on_toggle_pause=None, on_exit=None):
+        self._cb_open = on_open_stats; self._cb_settings = on_open_settings; self._cb_pause = on_toggle_pause; self._cb_exit = on_exit
 
     def show(self): self._tray.show()
     def hide(self): self._tray.hide()

@@ -1,11 +1,11 @@
-"""Application entry point: wires monitor, idle, classifier, storage, tray, UI."""
-import sys, os
+"""Application entry point: wires monitor, idle, classifier, storage, tray, browser UI."""
+import sys, os, subprocess
 from datetime import datetime
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import config as cfg, storage, monitor, idle_detector, classifier, tray, stats_html
+import config as cfg, storage, monitor, idle_detector, classifier, stats_html
 
 class TimeTracker:
     def __init__(self, app):
@@ -16,7 +16,12 @@ class TimeTracker:
             storage.cleanup_old_data(self._config["retention_days"])
         storage.save_rules_to_db(self._config.get("rules", []))
         self._tray = tray.TrayController(app)
-        self._tray.set_callbacks(on_open_stats=self._open_stats, on_toggle_pause=self._toggle_pause, on_exit=self._shutdown)
+        self._tray.set_callbacks(
+            on_open_stats=self._open_stats,
+            on_open_settings=self._open_settings,
+            on_toggle_pause=self._toggle_pause,
+            on_exit=self._shutdown,
+        )
         self._tray.show()
         monitor.start_monitor(self._on_activity, self._config.get("min_duration_sec", 5))
         idle_detector.start_idle_detector(on_idle=self._on_idle, on_resume=self._on_resume,
@@ -44,6 +49,11 @@ class TimeTracker:
 
     def _open_stats(self):
         stats_html.generate()
+
+    def _open_settings(self):
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        if os.path.exists(config_path):
+            os.startfile(config_path)
 
     def _toggle_pause(self):
         self._paused = not self._paused; monitor.set_paused(self._paused)
