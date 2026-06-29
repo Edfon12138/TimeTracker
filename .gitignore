@@ -9,4 +9,6 @@ dist/
 *.db-shm
 *.db-wal
 icons/
+*.specdist/
+build/
 *.spec
