@@ -1,7 +1,7 @@
 """Generate stats HTML page with live editing via built-in HTTP server."""
 import os, json, sqlite3, webbrowser, tempfile, base64, threading, http.server, socket
 from datetime import datetime, timedelta, date as dt_date
-import storage, config as cfg, icon_extractor
+import time, storage, config as cfg, icon_extractor
 
 _server = None; _port = None
 
@@ -46,6 +46,44 @@ def generate():
         "timeline": _add_icons([dict(r) for r in storage.get_activity_timeline(today)]),
         "config": cfg.load_config(),
     }
+
+    # ── Merge idle/video sessions into stats ──
+    import idle_detector
+    idle_sessions = idle_detector.get_idle_sessions()
+    idle_cat_today = {"空闲": 0, "视频": 0}
+    idle_timeline = []
+    for s in idle_sessions:
+        cat = s["category"]
+        dur = s["duration"]
+        idle_cat_today[cat] = idle_cat_today.get(cat, 0) + dur
+        idle_timeline.append({
+            "process": s["process"] or "(无)",
+            "window_title": s["window_title"] or (f"[{cat}]" if cat == "视频" else "[无操作]"),
+            "category": cat,
+            "color": "#6B7280" if cat == "空闲" else "#8B5CF6",
+            "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(s["started_at"])),
+            "duration": dur,
+            "icon_uri": _icon_svg("空"[0] if cat == "空闲" else "视", "#6B7280" if cat == "空闲" else "#8B5CF6"),
+        })
+
+    # Merge into today's category stats
+    for cat, secs in idle_cat_today.items():
+        if secs > 0:
+            dp["today"]["cat"].append({"label": cat, "value": secs, "color": "#6B7280" if cat == "空闲" else "#8B5CF6", "hk": cat, "type": "category"})
+
+    # Merge into week/month (only today's data, since idle sessions are memory-only)
+    for rn in ("week", "month"):
+        for cat, secs in idle_cat_today.items():
+            if secs > 0:
+                existing = [x for x in dp[rn]["cat"] if x["label"] == cat]
+                if existing:
+                    existing[0]["value"] += secs
+                else:
+                    dp[rn]["cat"].append({"label": cat, "value": secs, "color": "#6B7280" if cat == "空闲" else "#8B5CF6", "hk": cat, "type": "category"})
+
+    # Merge idle sessions into timeline (sorted by time)
+    dp["timeline"].extend(idle_timeline)
+    dp["timeline"].sort(key=lambda x: x.get("started_at", ""))
 
     conn = sqlite3.connect(storage._db_path()); conn.row_factory = sqlite3.Row
     for rn, f, t_ in [("today", today, today), ("week", ws, today), ("month", ms, today)]:
