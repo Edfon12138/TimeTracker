@@ -110,38 +110,41 @@ def get_icon_uri(process_name: str, size: int = 20) -> str | None:
     SHGetFileInfo and caches the result so subsequent lookups are instant.
     Returns None when extraction fails (caller falls back to letter SVG).
     """
-    name = process_name.lower()
-    cache_path = _cached_icon_path(name)
-
-    # 1. Disk cache hit — read and return
-    if os.path.isfile(cache_path):
-        try:
-            with open(cache_path, "rb") as f:
-                return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
-        except Exception:
-            pass  # corrupted file; re-extract
-
-    # 2. Extract icon via Qt / SHGetFileInfo
-    pm = get_icon_pixmap(name, size)
-    if pm is None or pm.isNull():
-        return None
-
-    # 3. Serialise to PNG bytes
-    ba = QByteArray()
-    buf = QBuffer(ba)
-    buf.open(QIODevice.WriteOnly)
-    pm.save(buf, "PNG")
-    buf.close()
-    png_bytes = bytes(ba)
-
-    # 4. Save to disk cache (best-effort)
     try:
-        with open(cache_path, "wb") as f:
-            f.write(png_bytes)
-    except Exception:
-        pass
+        name = process_name.lower()
+        cache_path = _cached_icon_path(name)
 
-    return f"data:image/png;base64,{base64.b64encode(png_bytes).decode()}"
+        # 1. Disk cache hit — read and return
+        if os.path.isfile(cache_path):
+            try:
+                with open(cache_path, "rb") as f:
+                    return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
+            except Exception:
+                pass  # corrupted file; re-extract
+
+        # 2. Extract icon via Qt / SHGetFileInfo
+        pm = get_icon_pixmap(name, size)
+        if pm is None or pm.isNull():
+            return None
+
+        # 3. Serialise to PNG bytes
+        ba = QByteArray()
+        buf = QBuffer(ba)
+        buf.open(QIODevice.WriteOnly)
+        pm.save(buf, "PNG")
+        buf.close()
+        png_bytes = bytes(ba)
+
+        # 4. Save to disk cache (best-effort)
+        try:
+            with open(cache_path, "wb") as f:
+                f.write(png_bytes)
+        except Exception:
+            pass
+
+        return f"data:image/png;base64,{base64.b64encode(png_bytes).decode()}"
+    except Exception:
+        return None
 
 
 def clear_cache():

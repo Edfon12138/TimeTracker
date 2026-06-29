@@ -47,12 +47,21 @@ def generate():
     ws = (dt_date.today() - timedelta(days=dt_date.today().weekday())).isoformat()
     ms = dt_date.today().replace(day=1).isoformat()
 
+    conf = cfg.load_config()
+
+    # Pre-cache icons for all known processes BEFORE building stats data,
+    # so _add_icons() hits the disk cache on first use.
+    for r in conf.get("rules", []):
+        proc = r.get("process", "")
+        if proc:
+            icon_extractor.get_icon_uri(proc)
+
     dp = {
         "today": {"cat": _get_chart_data("category", today, today), "prog": _get_chart_data("program", today, today)},
         "week": {"cat": _get_chart_data("category", ws, today), "prog": _get_chart_data("program", ws, today)},
         "month": {"cat": _get_chart_data("category", ms, today), "prog": _get_chart_data("program", ms, today)},
         "timeline": _add_icons([dict(r) for r in storage.get_activity_timeline(today)]),
-        "config": cfg.load_config(),
+        "config": conf,
     }
 
     # ── Merge idle/video sessions into stats ──
