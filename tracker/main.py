@@ -10,6 +10,10 @@ import config as cfg, storage, monitor, idle_detector, classifier, tray, stats_h
 class TimeTracker:
     def __init__(self, app):
         self._app = app; self._config = cfg.load_config(); self._paused = False
+        # Save default config on first run so all files are in the same directory
+        import os as _os
+        if not _os.path.exists(cfg._config_path()):
+            cfg.save_config(self._config)
         storage.init_db()
         if self._config.get("retention_days", 90) > 0:
             storage.cleanup_old_data(self._config["retention_days"])
@@ -47,7 +51,11 @@ class TimeTracker:
         self._tray.update_tooltip(f"{sta} · 今日 {t//3600}h {(t%3600)//60}m")
 
     def _open_stats(self):
-        stats_html.generate()
+        try:
+            stats_html.generate()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
 
     def _open_settings(self):
         config_path = cfg._config_path() if hasattr(cfg, '_config_path') else \

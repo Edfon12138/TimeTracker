@@ -1,7 +1,7 @@
 """Extract program icons from .exe via SHGetFileInfo, with fallback letter icons.
 Png cache saved to icons/ directory next to config/db for portable reuse."""
 import ctypes, ctypes.wintypes, os, hashlib, sys, base64
-from PySide6.QtGui import QPixmap, QColor, QPainter, QFont
+from PySide6.QtGui import QPixmap, QImage, QColor, QPainter, QFont
 from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice
 
 SHGFI_ICON = 0x000000100; SHGFI_SMALLICON = 0x000000001; MAX_PATH = 260
@@ -70,9 +70,9 @@ def get_icon_pixmap(process_name: str, size: int = 28):
     shfi = _SHFILEINFO()
     r = ctypes.windll.shell32.SHGetFileInfoW(exe, 0, ctypes.byref(shfi), ctypes.sizeof(shfi), SHGFI_ICON|SHGFI_SMALLICON)
     if r and shfi.hIcon:
-        pm = QPixmap.fromHICON(shfi.hIcon)
-        if not pm.isNull():
-            pm = pm.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        img = QImage.fromHICON(shfi.hIcon)
+        if not img.isNull():
+            pm = QPixmap.fromImage(img).scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             ctypes.windll.user32.DestroyIcon(shfi.hIcon)
             _icon_cache[key] = pm; return pm
         ctypes.windll.user32.DestroyIcon(shfi.hIcon)

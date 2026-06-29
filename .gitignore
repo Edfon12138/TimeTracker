@@ -4,3 +4,7 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+*.pyo
+*.db
+*.db-shm
+*.db-wal

@@ -1,9 +1,9 @@
 """Generate stats HTML page with live editing via built-in HTTP server."""
-import os, json, sqlite3, webbrowser, tempfile, base64, threading, http.server, socket
+import os, json, sqlite3, webbrowser, tempfile, base64, threading, http.server, socket, traceback
 from datetime import datetime, timedelta, date as dt_date
 import time, storage, config as cfg, icon_extractor
 
-_server = None; _port = None
+_server = None; _port = None; _dp = {}
 
 
 def _icon_svg(letter: str, color: str, size: int = 20) -> str:
@@ -57,7 +57,10 @@ def generate():
 
     # ── Merge idle/video sessions into stats ──
     import idle_detector
-    idle_sessions = idle_detector.get_idle_sessions()
+    try:
+        idle_sessions = idle_detector.get_idle_sessions()
+    except Exception:
+        idle_sessions = []
     idle_cat_today = {"空闲": 0, "视频": 0}
     idle_timeline = []
     for s in idle_sessions:
@@ -111,7 +114,8 @@ def generate():
         dp[f"progs_by_cat_{rn}"] = g
     conn.close()
 
-    global _server, _port
+    global _server, _port, _dp
+    _dp = dp  # keep fresh data for the HTTP handler
 
     class _H(http.server.BaseHTTPRequestHandler):
         def log_message(self, *a): pass
@@ -132,7 +136,7 @@ def generate():
                 self.wfile.write(resp.encode())
         def do_GET(self):
             if self.path=="/":
-                json_data = json.dumps(dp, ensure_ascii=False)
+                json_data = json.dumps(_dp, ensure_ascii=False)
                 html = HTML_TEMPLATE.replace("__EMBEDDED_DATA__", json_data)
                 self.send_response(200); self.send_header("Content-Type","text/html;charset=utf-8")
                 self.end_headers(); self.wfile.write(html.encode("utf-8"))
@@ -542,7 +546,10 @@ function renderTimelineChart(){
   for(var h=markInterval; h<24; h+=markInterval){
     var min=(h%1)*60;
     var label=Math.floor(h).toString().padStart(2,'0')+':'+min.toString().padStart(2,'0');
-    rulerHTML+=rulerMark((h/24)*100,label, h%3===0?'major':'minor');
+    /* Only show text labels for whole-hour marks to avoid clutter */
+    var isWholeHour = (h % 1 === 0);
+    var cls = (h % 3 === 0) ? 'major' : 'minor';
+    rulerHTML+=rulerMark((h/24)*100, isWholeHour ? label : '', cls);
   }
   rulerHTML+=rulerMark(100,'24:00','major');
   ruler.innerHTML=rulerHTML;
@@ -627,9 +634,11 @@ function applyTimelineTransform(){
   var track=document.getElementById('tlTrack');
   var ruler=document.getElementById('tlRuler');
   var z=TL.zoom,px=TL.panX;
-  var t='scaleX('+z+') translateX('+px+'px)';
-  if(track) track.style.transform=t;
-  if(ruler) ruler.style.transform=t;
+  if(track) track.style.transform='scaleX('+z+') translateX('+px+'px)';
+  if(ruler){
+    ruler.style.width=(2400*z)+'px';
+    ruler.style.transform='translateX('+(px*z)+'px)';
+  }
   updateZoomLabel();
 }
 
