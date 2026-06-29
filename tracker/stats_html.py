@@ -1,96 +1,98 @@
-"""Generate self-contained HTML stats page and open in browser."""
-import os, json, sqlite3, webbrowser, tempfile, base64
+"""Generate stats HTML page with live editing via built-in HTTP server."""
+import os, json, sqlite3, webbrowser, tempfile, base64, threading, http.server, socket
 from datetime import datetime, timedelta, date as dt_date
 import storage, config as cfg, icon_extractor
 
+_server = None; _port = None
+
 
 def _icon_svg(letter: str, color: str, size: int = 20) -> str:
-    """Generate a colored letter icon as an SVG data URI."""
-    r = max(2, round(size * 0.18))
-    fs = round(size * 0.55)
-    svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}">'
-        f'<rect width="{size}" height="{size}" rx="{r}" fill="{color}"/>'
-        f'<text x="{size//2}" y="{size//2+fs*0.35}" text-anchor="middle" '
-        f'fill="white" font-size="{fs}" font-weight="bold" '
-        f'font-family="Segoe UI,sans-serif">{letter}</text></svg>'
-    )
+    r = max(2, round(size * 0.18)); fs = round(size * 0.55)
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}">'
+           f'<rect width="{size}" height="{size}" rx="{r}" fill="{color}"/>'
+           f'<text x="{size//2}" y="{size//2+fs*0.35}" text-anchor="middle" '
+           f'fill="white" font-size="{fs}" font-weight="bold" '
+           f'font-family="Segoe UI,sans-serif">{letter}</text></svg>')
     return f"data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()}"
 
-
-def _add_icons(items: list) -> list:
-    """Add icon_uri to each item based on its label/process name."""
+def _add_icons(items):
     for item in items:
         label = item.get("label") or item.get("process", "")
         letter = (os.path.splitext(label)[0] or "?")[0].upper()
-        color = item.get("color", "#888")
-        item["icon_uri"] = _icon_svg(letter, color)
+        item["icon_uri"] = _icon_svg(letter, item.get("color", "#888"))
     return items
 
-
-def _get_chart_data(view_mode: str, date_from: str, date_to: str, drill_cat=None):
+def _get_chart_data(vm, df, dt2, drill=None):
     conf = cfg.load_config()
     cm = {c: conf["categories"].get(c, {}).get("color", "#5A5A5A") for c in conf["categories"]}
-    if view_mode == "category" and not drill_cat:
-        rows = storage.get_range_summary(date_from, date_to)
+    if vm == "category" and not drill:
+        rows = storage.get_range_summary(df, dt2)
         return _add_icons([{"label": r["category"], "value": r["total_seconds"],
-                            "color": cm.get(r["category"], "#5A5A5A"), "hk": r["category"],
-                            "type": "category"} for r in rows])
-    else:
-        rows = storage.get_program_stats(date_from, date_to)
-        return _add_icons([{"label": r["process"], "value": r["total_seconds"],
-                            "color": icon_extractor.get_icon_color(r["process"]),
-                            "hk": r["process"], "type": "program"} for r in rows])
+                "color": cm.get(r["category"], "#5A5A5A"), "hk": r["category"], "type": "category"} for r in rows])
+    rows = storage.get_program_stats(df, dt2)
+    return _add_icons([{"label": r["process"], "value": r["total_seconds"],
+            "color": icon_extractor.get_icon_color(r["process"]), "hk": r["process"], "type": "program"} for r in rows])
 
 
 def generate():
     today = dt_date.today().isoformat()
-    week_start = (dt_date.today() - timedelta(days=dt_date.today().weekday())).isoformat()
-    month_start = dt_date.today().replace(day=1).isoformat()
+    ws = (dt_date.today() - timedelta(days=dt_date.today().weekday())).isoformat()
+    ms = dt_date.today().replace(day=1).isoformat()
 
-    data_pack = {
-        "today": {"cat": _get_chart_data("category", today, today),
-                  "prog": _get_chart_data("program", today, today)},
-        "week": {"cat": _get_chart_data("category", week_start, today),
-                 "prog": _get_chart_data("program", week_start, today)},
-        "month": {"cat": _get_chart_data("category", month_start, today),
-                  "prog": _get_chart_data("program", month_start, today)},
+    dp = {
+        "today": {"cat": _get_chart_data("category", today, today), "prog": _get_chart_data("program", today, today)},
+        "week": {"cat": _get_chart_data("category", ws, today), "prog": _get_chart_data("program", ws, today)},
+        "month": {"cat": _get_chart_data("category", ms, today), "prog": _get_chart_data("program", ms, today)},
         "timeline": _add_icons([dict(r) for r in storage.get_activity_timeline(today)]),
         "config": cfg.load_config(),
     }
 
-    # Per-category program data for drill-down
-    conn = sqlite3.connect(storage._db_path())
-    conn.row_factory = sqlite3.Row
-    for rn, df, dt_ in [
-        ("today", today, today),
-        ("week", week_start, today),
-        ("month", month_start, today),
-    ]:
+    conn = sqlite3.connect(storage._db_path()); conn.row_factory = sqlite3.Row
+    for rn, f, t_ in [("today", today, today), ("week", ws, today), ("month", ms, today)]:
         rows = conn.execute(
-            "SELECT process, category, SUM(duration) AS total_seconds "
-            "FROM activity_log WHERE date BETWEEN ? AND ? "
-            "GROUP BY process, category ORDER BY category, total_seconds DESC",
-            (df, dt_)
-        ).fetchall()
-        grouped = {}
+            "SELECT process,category,SUM(duration) AS total_seconds FROM activity_log "
+            "WHERE date BETWEEN ? AND ? GROUP BY process,category ORDER BY category,total_seconds DESC", (f, t_)).fetchall()
+        g = {}
         for r in rows:
-            d = dict(r)
-            d["color"] = icon_extractor.get_icon_color(d["process"])
-            grouped.setdefault(d["category"], []).append(d)
-        # Add icons to each item in each category group
-        for cat in grouped:
-            _add_icons(grouped[cat])
-        data_pack[f"progs_by_cat_{rn}"] = grouped
+            d = dict(r); d["color"] = icon_extractor.get_icon_color(d["process"])
+            g.setdefault(d["category"], []).append(d)
+        for c_ in g: _add_icons(g[c_])
+        dp[f"progs_by_cat_{rn}"] = g
     conn.close()
 
-    json_data = json.dumps(data_pack, ensure_ascii=False)
-    html = HTML_TEMPLATE.replace("__EMBEDDED_DATA__", json_data)
+    global _server, _port
 
-    path = os.path.join(tempfile.gettempdir(), "timetracker_stats.html")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(html)
-    webbrowser.open(f"file://{path}")
+    class _H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+        def do_OPTIONS(self):
+            self.send_response(200); self.send_header("Access-Control-Allow-Origin","*")
+            self.send_header("Access-Control-Allow-Methods","POST,OPTIONS"); self.send_header("Access-Control-Allow-Headers","Content-Type")
+            self.end_headers()
+        def do_POST(self):
+            if self.path=="/save-config":
+                try:
+                    body = json.loads(self.rfile.read(int(self.headers["Content-Length"])).decode())
+                    cfg.save_config(body); storage.save_rules_to_db(body.get("rules",[]))
+                    resp = json.dumps({"ok":True,"config":cfg.load_config()})
+                except Exception as e:
+                    resp = json.dumps({"ok":False,"error":str(e)})
+                self.send_response(200); self.send_header("Content-Type","application/json")
+                self.send_header("Access-Control-Allow-Origin","*"); self.end_headers()
+                self.wfile.write(resp.encode())
+        def do_GET(self):
+            if self.path=="/":
+                json_data = json.dumps(dp, ensure_ascii=False)
+                html = HTML_TEMPLATE.replace("__EMBEDDED_DATA__", json_data)
+                self.send_response(200); self.send_header("Content-Type","text/html;charset=utf-8")
+                self.end_headers(); self.wfile.write(html.encode("utf-8"))
+            else:
+                self.send_response(404); self.end_headers()
+
+    if _server is None:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.bind(("127.0.0.1", 0)); _port = s.getsockname()[1]; s.close()
+        _server = http.server.ThreadingHTTPServer(("127.0.0.1", _port), _H)
+        t = threading.Thread(target=_server.serve_forever, daemon=True); t.start()
+    webbrowser.open(f"http://127.0.0.1:{_port}/")
 
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
@@ -120,44 +122,49 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
 .tl{font-size:11px;color:#5E5A54;text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
 .spacer{flex:1}
 .main{display:flex;gap:24px;flex-wrap:wrap}
-.chart-box{width:300px;height:260px;position:relative;flex-shrink:0}
+.chart-box{width:300px;height:280px;position:relative;flex-shrink:0}
 .breakdown{flex:1;min-width:240px;display:flex;flex-direction:column;gap:4px}
-.bi{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:#24262E;cursor:pointer;transition:all .1s}
-.bi:hover{background:#2C2E36;transform:translateX(2px)}
-.bi.dimmed:not(.hl){opacity:.3}
+.bi{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:#24262E;cursor:pointer;transition:all .12s}
+.bi:hover{background:#2C2E36}
+.bi.dimmed:not(.hl){opacity:.3;transition:opacity .2s}
 .bi.hl{box-shadow:inset 0 0 0 1px rgba(212,149,107,.5);background:#2A2E35}
 .pgm-icon{width:22px;height:22px;border-radius:4px;flex-shrink:0;display:inline-block;vertical-align:middle}
 .info{flex:1;min-width:0}
 .name{font-size:13px;color:#EAE4D9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar{width:60px;height:3px;background:#2E3039;border-radius:2px;overflow:hidden;flex-shrink:0}
+.bar-w{width:60px;height:3px;background:#2E3039;border-radius:2px;overflow:hidden;flex-shrink:0}
 .bar-f{height:100%;border-radius:2px;transition:width .2s}
 .tm{font-family:Consolas,'Cascadia Code',monospace;font-size:14px;font-weight:500;color:#EAE4D9;width:56px;text-align:right;flex-shrink:0}
 .pct{font-family:Consolas,monospace;font-size:11px;color:#5E5A54;width:32px;text-align:right;flex-shrink:0}
 .sl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#5E5A54;margin:16px 0 10px;display:flex;align-items:center;gap:8px}
 .sl::after{content:'';flex:1;height:1px;background:#2E3039}
-.tr{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:4px;font-size:12px}
+.tr{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:4px;font-size:12px;transition:background .12s}
 .tr:hover{background:#24262E}
 .tt{font-family:Consolas,monospace;font-size:11px;color:#5E5A54;width:48px;flex-shrink:0}
 .ttl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .td{font-family:Consolas,monospace;font-size:12px;font-weight:500;color:#EAE4D9;width:52px;text-align:right;flex-shrink:0}
 .tc{font-size:10px;padding:2px 8px;border-radius:3px;font-weight:500;width:42px;text-align:center;flex-shrink:0}
 .footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #2E3039}
-.btn{padding:7px 16px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;border:1px solid #2E3039;background:#24262E;color:#9B958A;transition:all .1s}
+.btn{padding:7px 16px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;border:1px solid #2E3039;background:#24262E;color:#9B958A;transition:all .12s}
 .btn:hover{color:#EAE4D9;border-color:#4A4D56}
 .btn-p{background:#D4956B;color:#1A1C21;border-color:#D4956B;font-weight:600}
 .btn-p:hover{background:#E8B48A}
+.btn-r{background:#5C2D2D;color:#E85D75;border-color:#5C2D2D}
+.btn-r:hover{background:#6D3A3A}
 .bread{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#D4956B;cursor:pointer}
 .bread:hover{color:#E8B48A}
-.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
-.modal-overlay.show{display:flex}
-.modal{background:#1E2027;border:1px solid #2E3039;border-radius:12px;width:680px;max-height:80vh;overflow-y:auto;padding:24px}
-.modal h2{font-size:16px;color:#EAE4D9;margin-bottom:16px}
-.modal table{width:100%;border-collapse:collapse;font-size:12px}
-.modal th{background:#2E3039;color:#9B958A;padding:8px 10px;text-align:left;font-weight:500;position:sticky;top:0}
-.modal td{padding:8px 10px;border-bottom:1px solid #2E3039;color:#EAE4D9}
-.modal tr:hover td{background:#24262E}
-.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
-.modal .note{color:#5E5A54;font-size:11px;margin-top:12px}
+
+/* Settings modal */
+.mo{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.mo.show{display:flex}
+.mo-box{background:#1E2027;border:1px solid #2E3039;border-radius:12px;width:720px;max-height:85vh;overflow-y:auto;padding:24px}
+.mo-box h2{font-size:16px;color:#EAE4D9;margin-bottom:12px}
+.mo-box .tbl{width:100%;border-collapse:collapse;font-size:12px}
+.mo-box .tbl th{background:#2E3039;color:#9B958A;padding:7px 8px;text-align:left;font-weight:500;position:sticky;top:0}
+.mo-box .tbl td{padding:4px 8px;border-bottom:1px solid #2E3039}
+.mo-box .tbl tr:hover td{background:#24262E}
+.mo-box .tbl input,.mo-box .tbl select{background:#16181D;color:#EAE4D9;border:1px solid #2E3039;padding:4px 7px;border-radius:4px;font-size:12px;width:100%;font-family:inherit}
+.mo-box .tbl select{width:auto}
+.mo-box .tbl input:focus,.mo-box .tbl select:focus{outline:none;border-color:#D4956B}
 </style>
 </head>
 <body>
@@ -190,14 +197,16 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
   </div>
 </div>
 
-<!-- Settings Modal -->
-<div class="modal-overlay" id="settingsModal">
-  <div class="modal">
+<!-- Settings modal -->
+<div class="mo" id="settingsModal">
+  <div class="mo-box">
     <h2>分类规则设置</h2>
-    <table><thead><tr><th>进程</th><th>标题匹配(正则)</th><th>分类</th></tr></thead><tbody id="rulesBody"></tbody></table>
-    <p class="note">&#128161; 要修改规则，在右键托盘菜单「设置」中打开 config.json 编辑。</p>
-    <div class="modal-actions">
-      <button class="btn btn-p" id="closeModalBtn">关闭</button>
+    <table class="tbl"><thead><tr><th style="width:28%">进程</th><th style="width:38%">标题匹配(正则)</th><th>分类</th><th style="width:40px"></th></tr></thead><tbody id="rulesBody"></tbody></table>
+    <div style="margin-top:8px"><button class="btn" id="addRuleBtn">+ 添加规则</button></div>
+    <p class="note" style="color:#5E5A54;font-size:11px;margin-top:10px">&#128161; 分类颜色在 config.json 中设置。</p>
+    <div class="footer" style="margin-top:12px">
+      <button class="btn" id="closeModalBtn">取消</button>
+      <button class="btn btn-p" id="saveConfigBtn">保存</button>
     </div>
   </div>
 </div>
@@ -205,7 +214,7 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
 <script>
 var DATA = __EMBEDDED_DATA__;
 var CC = {'工作':'#7BA78E','娱乐':'#D4956B','浏览':'#7B9EC7','通讯':'#A78BB5','系统':'#6B6B6B','其他':'#5A5A5A'};
-var chart = null, state = {range:'today',view:'cat',ctype:'donut',drill:null,hlIdx:-1};
+var chart = null, state = {range:'today',view:'cat',ctype:'donut',drill:null,hlKey:null};
 
 function gf(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?h+'h '+m+'m':m+'m';}
 
@@ -219,182 +228,217 @@ function items(){
   return DATA[r].prog;
 }
 
-function getIdxByHk(hk){
+function hkIdx(hk){
   var its=items();
   for(var i=0;i<its.length;i++)if(its[i].hk==hk)return i;
   return -1;
 }
 
-// Custom Chart.js plugin: draw letter icons on bar chart y-axis
-var iconLabelPlugin = {
-  id:'iconLabel',
+function totalVal(){return items().reduce(function(s,i){return s+i.value;},0);}
+
+/* ── Center text plugin for donut chart ── */
+var centerTextPlugin = {
+  id:'centerText',
   afterDraw:function(chart){
-    if(chart.config.type!='bar'||chart.data.datasets.length==0)return;
-    var ctx=chart.ctx,meta=chart.getDatasetMeta(0);
-    var its=items();
+    if(chart.config.type!='doughnut')return;
+    var ctx=chart.ctx,its=items(),total=totalVal(),hl=state.hlKey;
+    var activeItem=hl?its[hkIdx(hl)]:null;
+    var displayTime=activeItem?gf(activeItem.value):gf(total);
+    var displayLabel=activeItem?activeItem.label:'总计';
+    var ca=chart.chartArea;
+    ctx.save();
+    ctx.textAlign='center';
+    ctx.fillStyle='#EAE4D9';
+    ctx.font='bold 20px Consolas,monospace';
+    ctx.fillText(displayTime, ca.left+ca.width/2, ca.top+ca.height/2-4);
+    ctx.fillStyle=activeItem?activeItem.color:'#5E5A54';
+    ctx.font='11px Segoe UI,sans-serif';
+    ctx.fillText(displayLabel, ca.left+ca.width/2, ca.top+ca.height/2+18);
+    ctx.restore();
+  }
+};
+
+/* ── Bar chart icon plugin ── */
+var barIconPlugin = {
+  id:'barIcon',
+  afterDraw:function(chart){
+    if(chart.config.type!='bar')return;
+    var ctx=chart.ctx,meta=chart.getDatasetMeta(0),its=items(),ca=chart.chartArea;
     chart.data.labels.forEach(function(l,i){
       var bar=meta.data[i];if(!bar)return;
-      var x=chart.chartArea.left-26,y=bar.y;
-      var item=its[i];if(!item)return;
-      var img=new Image();img.src=item.icon_uri;
-      // Draw icon as img if available, fallback to colored square
-      if(img.complete&&img.naturalWidth>0){
-        ctx.drawImage(img,x,y-10,20,20);
-      }else{
-        ctx.fillStyle=item.color||'#888';
-        ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y-10,20,20,4):ctx.rect(x,y-10,20,20);
-        ctx.fill();
-        ctx.fillStyle='#fff';
-        ctx.font='bold 11px Segoe UI,sans-serif';
-        ctx.textAlign='center';ctx.textBaseline='middle';
-        ctx.fillText((item.label||'?')[0],x+10,y);
+      var x=ca.left-28,y=bar.y;
+      var item=its[i];if(!item||!item.icon_uri)return;
+      if(state.view=='prog'||(state.view=='cat'&&state.drill)){
+        var img=new Image();img.src=item.icon_uri;
+        if(img.complete&&img.naturalWidth>0){ctx.drawImage(img,x,y-10,20,20);}
+        else{ctx.fillStyle=item.color;ctx.beginPath();ctx.rect(x,y-10,20,20);ctx.fill();
+          ctx.fillStyle='#fff';ctx.font='bold 11px Segoe UI,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText((item.label||'?')[0],x+10,y);}
       }
     });
   }
 };
+Chart.register(centerTextPlugin, barIconPlugin);
 
-Chart.register(iconLabelPlugin);
-
+/* ── Render chart ── */
 function renderChart(){
   var its=items();
-  var container=document.querySelector('.chart-box');
-  container.innerHTML='<canvas id="chartCanvas"></canvas>';
+  document.querySelector('.chart-box').innerHTML='<canvas id="chartCanvas"></canvas>';
   var ctx=document.getElementById('chartCanvas').getContext('2d');
   if(chart)chart.destroy();
-
-  var commonOpts={
+  var total=totalVal();
+  var common={
     responsive:true,maintainAspectRatio:false,
     plugins:{
       legend:{display:false},
       tooltip:{
-        backgroundColor:'#24262E',titleColor:'#EAE4D9',
-        bodyColor:'#EAE4D9',borderColor:'#2E3039',borderWidth:1,
-        padding:10,cornerRadius:6,
+        backgroundColor:'#24262E',titleColor:'#EAE4D9',bodyColor:'#EAE4D9',
+        borderColor:'#2E3039',borderWidth:1,padding:10,cornerRadius:6,
         callbacks:{
           title:function(t){return t[0].label;},
-          label:function(t){
-            var total=t.dataset.data.reduce(function(a,b){return a+b;},0);
-            return ' '+gf(t.raw)+' ('+Math.round(t.raw/total*100)+'%)';
-          }
+          label:function(t){return ' '+gf(t.raw)+' ('+Math.round(t.raw/total*100)+'%)';}
         }
       }
     }
   };
-
   if(state.ctype=='donut'){
     chart=new Chart(ctx,{
       type:'doughnut',
-      data:{labels:its.map(function(i){return i.label;}),datasets:[{data:its.map(function(i){return i.value;}),backgroundColor:its.map(function(i){return i.color;}),borderWidth:0,hoverOffset:12}]},
-      options:Object.assign(commonOpts,{
-        cutout:'65%',
+      data:{labels:its.map(function(i){return i.label;}),datasets:[{data:its.map(function(i){return i.value;}),backgroundColor:its.map(function(i){return i.color;}),borderWidth:1,borderColor:'#1E2027',hoverOffset:15}]},
+      options:Object.assign(common,{
+        cutout:'62%',
+        animations:{animateRotate:true,duration:400},
         onHover:function(e,els){
-          state.hlIdx=els.length?els[0].index:-1;
-          state._hl=state.hlIdx>=0?its[state.hlIdx].hk:null;
-          if(state.hlIdx>=0&&chart){chart.setActiveElements([{datasetIndex:0,index:state.hlIdx}]);chart.draw();}
-          renderList();
+          if(els.length){state.hlKey=its[els[0].index].hk;if(chart){chart.setActiveElements([{datasetIndex:0,index:els[0].index}]);chart.draw();}}
+          else{state.hlKey=null;chart.setActiveElements([]);chart.draw();}
+          syncHL();
         }
       })
     });
   }else{
-    // For bar chart, extend labels area to make room for icons
+    var isProgView=state.view=='prog'||(state.view=='cat'&&state.drill);
+    var padLeft=isProgView?32:8;
     chart=new Chart(ctx,{
       type:'bar',
-      data:{labels:its.map(function(i){return i.label;}),datasets:[{data:its.map(function(i){return i.value;}),backgroundColor:its.map(function(i){return i.color;}),borderRadius:3,hoverBackgroundColor:its.map(function(i){return i.color;})}]},
-      options:Object.assign(commonOpts,{
-        indexAxis:'y',
-        layout:{padding:{left:30}},
+      data:{labels:its.map(function(i){
+        // Category view: show text; Program view: empty (icon only via plugin)
+        return (state.view=='cat'&&!state.drill)?i.label:'';
+      }),datasets:[{data:its.map(function(i){return i.value;}),backgroundColor:its.map(function(i){return i.color;}),borderRadius:4,hoverBackgroundColor:its.map(function(i){return i.color;})}]},
+      options:Object.assign(common,{
+        indexAxis:'y',layout:{padding:{left:padLeft}},
         scales:{
           x:{grid:{color:'#2E3039'},ticks:{color:'#5E5A54'}},
-          y:{
-            ticks:{
-              color:'#9B958A',font:{size:11},
-              callback:function(v,i){return its[i]?' '+its[i].label:'';}
-            }
-          }
+          y:{ticks:{color:function(ctx){var its2=items();return ctx.chart.data.labels[0]?'#9B958A':'transparent';},font:{size:11}}}
         },
         onHover:function(e,els){
-          state.hlIdx=els.length?els[0].index:-1;
-          state._hl=state.hlIdx>=0?its[state.hlIdx].hk:null;
-          if(state.hlIdx>=0&&chart){chart.setActiveElements([{datasetIndex:0,index:state.hlIdx}]);chart.draw();}
-          renderList();
+          if(els.length){state.hlKey=its[els[0].index].hk;if(chart){chart.setActiveElements([{datasetIndex:0,index:els[0].index}]);chart.draw();}}
+          else{state.hlKey=null;chart.setActiveElements([]);chart.draw();}
+          syncHL();
         }
       })
     });
   }
 }
 
-function renderList(){
-  var its=items(),total=its.reduce(function(s,i){return s+i.value;},0),hl=state._hl;
-  document.getElementById('breakdownList').innerHTML=its.map(function(i,idx){
-    var pct=total?Math.round(i.value/total*100):0;
-    var isHL=hl&&hl===i.hk;var dim=hl&&hl!==i.hk;
-    var cls=(isHL?' bi hl':'')+(dim?' dimmed':'');
-    var icon='<img class="pgm-icon" src="'+i.icon_uri+'" alt="">';
-    var dot=state.view=='cat'&&!state.drill?'<div class="dot" style="background:'+i.color+';width:10px;height:10px;border-radius:3px;flex-shrink:0"></div>':'';
-    return '<div class="bi'+cls+'" data-hk="'+i.hk+'">'+(dot||icon)+'<div class="info"><div class="name">'+i.label+'</div></div><div class="bar"><div class="bar-f" style="width:'+Math.max(pct,2)+'%;background:'+i.color+'"></div></div><span class="tm">'+gf(i.value)+'</span><span class="pct">'+pct+'%</span></div>';
-  }).join('');
-
+/* ── Highlight sync (does NOT re-render list, just toggles CSS) ── */
+function syncHL(){
+  var hl=state.hlKey;
   document.querySelectorAll('#breakdownList .bi').forEach(function(el){
+    var isHL=hl&&hl===el.dataset.hk;
+    el.classList.toggle('hl',isHL);
+    el.classList.toggle('dimmed',hl&&!isHL);
+  });
+}
+
+/* ── Render breakdown list (initial render only) ── */
+function renderList(){
+  var its=items(),total=totalVal();
+  document.getElementById('breakdownList').innerHTML=its.map(function(i){
+    var pct=total?Math.round(i.value/total*100):0;
+    var dot='<div class="dot" style="width:10px;height:10px;border-radius:3px;flex-shrink:0;background:'+i.color+'"></div>';
+    var icon='<img class="pgm-icon" src="'+i.icon_uri+'" alt="">';
+    return '<div class="bi" data-hk="'+i.hk+'">'+(state.view=='cat'&&!state.drill?dot:icon)+'<div class="info"><div class="name">'+i.label+'</div></div><div class="bar-w"><div class="bar-f" style="width:'+Math.max(pct,2)+'%;background:'+i.color+'"></div></div><span class="tm">'+gf(i.value)+'</span><span class="pct">'+pct+'%</span></div>';
+  }).join('');
+  var list=document.querySelectorAll('#breakdownList .bi');
+  list.forEach(function(el){
     el.onclick=function(){
       var hk=el.dataset.hk;
       if(state.view=='cat'&&!state.drill&&CC[hk]){state.drill=hk;document.getElementById('bread').style.display='inline-flex';renderChart();renderList();}
     };
-    el.onmouseenter=function(){state._hl=el.dataset.hk;state.hlIdx=getIdxByHk(state._hl);if(state.hlIdx>=0&&chart){chart.setActiveElements([{datasetIndex:0,index:state.hlIdx}]);chart.draw();}renderList();};
-    el.onmouseleave=function(){state._hl=null;state.hlIdx=-1;if(chart){chart.setActiveElements([]);chart.draw();}renderList();};
+    el.onmouseenter=function(){state.hlKey=el.dataset.hk;var idx=hkIdx(state.hlKey);if(idx>=0&&chart){chart.setActiveElements([{datasetIndex:0,index:idx}]);chart.draw();}syncHL();};
+    el.onmouseleave=function(){state.hlKey=null;if(chart){chart.setActiveElements([]);chart.draw();}syncHL();};
   });
 }
 
+/* ── Timeline ── */
 function renderTL(){
   var tl=DATA.timeline||[];
   document.getElementById('timeline').innerHTML=tl.map(function(r){
     var s=r.duration,ds=s>=3600?Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m':Math.floor(s/60)+'m';
     var cc=CC[r.category]||'#888';
-    var itemIcon=r.icon_uri||'';
-    return '<div class="tr">'+'<span class="tt">'+(r.started_at||'').slice(11,16)+'</span>'+(itemIcon?'<img class="pgm-icon" src="'+itemIcon+'" alt="" style="width:18px;height:18px">':'')+'<span class="ttl">'+r.process+' &mdash; '+(r.window_title||'').slice(0,30)+'</span><span class="td">'+ds+'</span><span class="tc" style="background:'+cc+'22;color:'+cc+'">'+r.category+'</span></div>';
+    return '<div class="tr"><span class="tt">'+(r.started_at||'').slice(11,16)+'</span>'+(r.icon_uri?'<img class="pgm-icon" src="'+r.icon_uri+'" alt="" style="width:18px;height:18px">':'')+'<span class="ttl">'+r.process+' &mdash; '+(r.window_title||'').slice(0,30)+'</span><span class="td">'+ds+'</span><span class="tc" style="background:'+cc+'22;color:'+cc+'">'+r.category+'</span></div>';
   }).join('');
 }
 
 function refresh(){renderChart();renderList();renderTL();}
 
-// Tab switching
+/* ── Events ── */
 document.getElementById('timeTabs').addEventListener('click',function(e){
   var t=e.target.closest('.tab');if(!t||!t.dataset.r)return;
   document.querySelectorAll('#timeTabs .tab').forEach(function(x){x.classList.remove('active');});
-  t.classList.add('active');state.range=t.dataset.r;state.drill=null;state.hlIdx=-1;
+  t.classList.add('active');state.range=t.dataset.r;state.drill=null;state.hlKey=null;
   document.getElementById('bread').style.display='none';refresh();
 });
-
-// Toolbar: view + chart toggles
 document.querySelector('#app .toolbar').addEventListener('click',function(e){
   var b=e.target.closest('.tb');if(!b)return;
-  var p=b.parentElement;p.querySelectorAll('.tb').forEach(function(x){x.classList.remove('active');});
-  b.classList.add('active');
+  b.parentElement.querySelectorAll('.tb').forEach(function(x){x.classList.remove('active');});b.classList.add('active');
   if(b.dataset.v){state.view=b.dataset.v;state.drill=null;document.getElementById('bread').style.display='none';refresh();}
   if(b.dataset.c){state.ctype=b.dataset.c;refresh();}
 });
-
-// Breadcrumb back
 document.getElementById('bread').onclick=function(){state.drill=null;this.style.display='none';refresh();};
-
-// CSV export
 document.getElementById('exportBtn').onclick=function(){
   var rows=DATA.timeline||[],csv='﻿进程,窗口标题,分类,开始时间,时长(秒)\n';
   rows.forEach(function(r){csv+=r.process+','+r.window_title+','+r.category+','+r.started_at+','+r.duration+'\n';});
   var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='time_export.csv';a.click();
 };
 
-// Gear: show rules modal
-document.getElementById('gearBtn').onclick=function(){
-  var rules=DATA.config.rules||[],cats=DATA.config.categories||{};
-  document.getElementById('rulesBody').innerHTML=rules.map(function(r){
-    var tp=r.title_pattern||'';
-    return '<tr><td>'+r.process+'</td><td>'+(tp?'<code style="color:#D4956B">'+tp+'</code>':'<span style="color:#5E5A54">所有窗口</span>')+'</td><td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+((cats[r.category]||{}).color||'#888')+';vertical-align:middle;margin-right:4px"></span> '+r.category+'</td></tr>';
-  }).join('');
+/* ── Settings: editable rules ── */
+function openSettings(){
+  var config=DATA.config,cats=Object.keys(config.categories||{});
+  var body=document.getElementById('rulesBody');body.innerHTML='';
+  (config.rules||[]).forEach(function(r,i){addRuleRow(r.process,r.title_pattern||'',r.category||'其他');});
   document.getElementById('settingsModal').classList.add('show');
-};
+}
 
+function addRuleRow(process,titlePattern,category){
+  var body=document.getElementById('rulesBody'),row=body.insertRow();
+  var cats=Object.keys(DATA.config.categories||{});
+  row.innerHTML='<td><input type="text" value="'+(process||'')+'" class="r-proc"></td>'+
+    '<td><input type="text" value="'+(titlePattern||'')+'" class="r-pat" placeholder="留空=所有窗口"></td>'+
+    '<td><select class="r-cat">'+cats.map(function(c){return '<option'+(c==category?' selected':'')+'>'+c+'</option>';}).join('')+'</select></td>'+
+    '<td><button class="btn btn-r" style="padding:3px 10px;font-size:11px" onclick="this.closest(\'tr\').remove()">&#10005;</button></td>';
+}
+
+document.getElementById('gearBtn').onclick=openSettings;
+document.getElementById('addRuleBtn').onclick=function(){addRuleRow('','','其他');};
 document.getElementById('closeModalBtn').onclick=function(){document.getElementById('settingsModal').classList.remove('show');};
 document.getElementById('settingsModal').onclick=function(e){if(e.target===this)this.classList.remove('show');};
+
+document.getElementById('saveConfigBtn').onclick=function(){
+  var rows=document.querySelectorAll('#rulesBody tr'),rules=[];
+  rows.forEach(function(r){
+    var proc=r.querySelector('.r-proc'),pat=r.querySelector('.r-pat'),cat=r.querySelector('.r-cat');
+    if(proc&&proc.value.trim())rules.push({process:proc.value.trim(),title_pattern:pat.value.trim()||null,category:cat?cat.value:'其他'});
+  });
+  var config=DATA.config;config.rules=rules;
+  fetch('/save-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(config)})
+    .then(function(r){return r.json();})
+    .then(function(resp){
+      if(resp.ok){DATA.config=resp.config;}
+      document.getElementById('settingsModal').classList.remove('show');
+      refresh();
+    });
+};
 
 refresh();
 </script>
