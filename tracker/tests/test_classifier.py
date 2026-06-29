@@ -39,3 +39,23 @@ def test_case_insensitive():
 def test_extract_domain():
     d = classifier.extract_domain_from_title("GitHub - Google Chrome")
     assert d is not None
+
+def test_match_video_youtube():
+    assert classifier.match_video_keywords("YouTube - Google Chrome")
+
+def test_match_video_bilibili():
+    assert classifier.match_video_keywords("Bilibili - 一些视频")
+
+def test_match_video_netflix():
+    assert classifier.match_video_keywords("Netflix - 剧集名")
+
+def test_match_video_chinese():
+    assert classifier.match_video_keywords("正在播放：电影名")
+    assert classifier.match_video_keywords("追剧 - 视频播放器")
+
+def test_no_match_generic():
+    assert not classifier.match_video_keywords("GitHub PR review")
+    assert not classifier.match_video_keywords("Word文档")
+
+def test_no_match_case_insensitive():
+    assert classifier.match_video_keywords("youtube - test")

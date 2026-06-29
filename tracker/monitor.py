@@ -66,3 +66,10 @@ def set_paused(paused):
 
 def is_running():
     return _running
+
+def get_current_window():
+    """Return (process_name, window_title) of the current foreground window."""
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ("", "")
+    return (_get_process_name(hwnd), _get_window_title(hwnd))
