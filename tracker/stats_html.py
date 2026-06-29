@@ -165,6 +165,35 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
 .mo-box .tbl input,.mo-box .tbl select{background:#16181D;color:#EAE4D9;border:1px solid #2E3039;padding:4px 7px;border-radius:4px;font-size:12px;width:100%;font-family:inherit}
 .mo-box .tbl select{width:auto}
 .mo-box .tbl input:focus,.mo-box .tbl select:focus{outline:none;border-color:#D4956B}
+
+/* ── Timeline view ── */
+.tl-container{width:100%;user-select:none}
+.tl-header{position:relative;height:30px;margin-bottom:4px;overflow:hidden}
+.tl-ruler{position:absolute;left:0;top:0;height:30px;width:2400px;transform-origin:left center;border-bottom:1px solid #2E3039}
+.tl-ruler .rk{position:absolute;top:18px;font-size:10px;color:#5E5A54;transform:translateX(-50%);white-space:nowrap}
+.tl-ruler .rk::before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:10px;background:#2E3039}
+.tl-ruler .rk.major::before{height:14px;top:-18px}
+.tl-body{position:relative;height:180px;overflow:hidden;border-radius:6px;background:#1A1C21;cursor:grab;border:1px solid #2E3039}
+.tl-body:active{cursor:grabbing}
+.tl-track{position:absolute;left:0;top:0;height:100%;width:2400px;transform-origin:left center;will-change:transform}
+.tl-block{position:absolute;height:42px;border-radius:4px;top:50%;transform:translateY(-50%);cursor:pointer;overflow:hidden;transition:opacity .12s;border:1px solid rgba(255,255,255,.06)}
+.tl-block:hover{opacity:.85;border-color:rgba(255,255,255,.2)}
+.tl-block .bl{position:absolute;left:6px;right:6px;top:4px;font-size:11px;color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;line-height:1.2}
+.tl-block .bs{position:absolute;left:6px;right:6px;bottom:4px;font-size:9px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;line-height:1.2}
+.tl-block.small .bl{font-size:9px;top:50%;transform:translateY(-50%)}
+.tl-block.small .bs{display:none}
+.tl-block.tiny{min-width:2px}
+.tl-block.tiny .bl,.tl-block.tiny .bs{display:none}
+.tl-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.tl-zoom-label{font-size:11px;color:#5E5A54}
+.tl-zoom-controls{display:flex;align-items:center;gap:8px}
+.tl-zoom-controls input[type=range]{width:100px;height:4px;-webkit-appearance:none;appearance:none;background:#2E3039;border-radius:2px;outline:none}
+.tl-zoom-controls input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#D4956B;cursor:pointer;border:none}
+/* Tooltip for timeline blocks */
+.tl-tooltip{position:fixed;background:#24262E;border:1px solid #2E3039;border-radius:6px;padding:8px 12px;font-size:12px;color:#EAE4D9;pointer-events:none;z-index:1000;max-width:280px;box-shadow:0 4px 12px rgba(0,0,0,.4);display:none}
+.tl-tooltip .tt-cat{display:inline-block;padding:1px 8px;border-radius:3px;font-size:10px;font-weight:500;margin-bottom:4px}
+.tl-tooltip .tt-row{margin:2px 0;display:flex;justify-content:space-between;gap:16px}
+.tl-tooltip .tt-label{color:#9B958A}
 </style>
 </head>
 <body>
@@ -173,26 +202,49 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
     <div class="tab active" data-r="today">今日</div>
     <div class="tab" data-r="week">本周</div>
     <div class="tab" data-r="month">本月</div>
+    <div class="tab" data-r="timeline">时间轴</div>
     <div class="tab-spacer"></div>
     <button class="btn-gear" id="gearBtn" title="设置">&#9881;</button>
   </div>
   <div class="content">
-    <div class="toolbar">
-      <span class="tl">视图</span>
-      <div class="tg"><button class="tb active" data-v="cat">按分类</button><button class="tb" data-v="prog">按程序</button></div>
-      <span class="tl">图表</span>
-      <div class="tg"><button class="tb active" data-c="donut">饼图</button><button class="tb" data-c="bar">柱状图</button></div>
-      <div class="spacer"></div>
-      <div class="bread" id="bread" style="display:none"><span id="breadBack">&#8592; 返回全部</span></div>
+    <div id="statsView">
+      <div class="toolbar">
+        <span class="tl">视图</span>
+        <div class="tg"><button class="tb active" data-v="cat">按分类</button><button class="tb" data-v="prog">按程序</button></div>
+        <span class="tl">图表</span>
+        <div class="tg"><button class="tb active" data-c="donut">饼图</button><button class="tb" data-c="bar">柱状图</button></div>
+        <div class="spacer"></div>
+        <div class="bread" id="bread" style="display:none"><span id="breadBack">&#8592; 返回全部</span></div>
+      </div>
+      <div class="main">
+        <div class="chart-box"><canvas id="chartCanvas"></canvas></div>
+        <div class="breakdown" id="breakdownList"></div>
+      </div>
+      <div class="sl">时间线</div>
+      <div id="timeline"></div>
+      <div class="footer">
+        <button class="btn" id="exportBtn">导出 CSV</button>
+      </div>
     </div>
-    <div class="main">
-      <div class="chart-box"><canvas id="chartCanvas"></canvas></div>
-      <div class="breakdown" id="breakdownList"></div>
-    </div>
-    <div class="sl">时间线</div>
-    <div id="timeline"></div>
-    <div class="footer">
-      <button class="btn" id="exportBtn">导出 CSV</button>
+
+    <!-- Timeline tab content -->
+    <div id="timelineView" style="display:none">
+      <div class="tl-container">
+        <div class="tl-header">
+          <div class="tl-ruler" id="tlRuler"></div>
+        </div>
+        <div class="tl-body" id="tlBody">
+          <div class="tl-track" id="tlTrack"></div>
+        </div>
+        <div class="tl-footer">
+          <span class="tl-zoom-label" id="tlZoomLabel">24h 总览 (1×)</span>
+          <div class="tl-zoom-controls">
+            <button class="tb" id="tlZoomOut">−</button>
+            <input type="range" id="tlZoomSlider" min="1" max="16" step="0.25" value="1">
+            <button class="tb" id="tlZoomIn">+</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -382,12 +434,251 @@ function renderTL(){
 
 function refresh(){renderChart();renderList();renderTL();}
 
+/* ══════════════════════════════════════════════════
+   Interactive Timeline Component
+   ══════════════════════════════════════════════════ */
+var TL = {zoom:1,panX:0,isDragging:false,dragStartX:0,dragStartPan:0,blocks:[]};
+
+function timeToSec(tstr){
+  /* "2026-06-29 09:30:00" → seconds since midnight */
+  var p=tstr.split(' ');
+  if(p.length<2) return 0;
+  var q=p[1].split(':');
+  return parseInt(q[0])*3600+parseInt(q[1])*60+(parseInt(q[2])||0);
+}
+
+function buildTimelineBlocks(){
+  /* Merge idle + normal timeline data into blocks */
+  var items=DATA.timeline||[];
+  var blocks=[];
+  items.forEach(function(item){
+    var startSec=timeToSec(item.started_at);
+    if(startSec<0||startSec>=86400)return;
+    var endSec=startSec+(item.duration||0);
+    if(endSec>86400)endSec=86400;
+    var l=(startSec/86400)*100;
+    var w=((endSec-startSec)/86400)*100;
+    var cc=item.color||CC[item.category]||'#888';
+    blocks.push({
+      left:l, width:Math.max(w,0.15),
+      color:cc, cat:item.category,
+      process:item.process, title:item.window_title||'',
+      start:item.started_at, duration:item.duration||0,
+      startSec:startSec, endSec:endSec
+    });
+  });
+  blocks.sort(function(a,b){return a.startSec-b.startSec;});
+  return blocks;
+}
+
+function renderTimelineChart(){
+  var track=document.getElementById('tlTrack');
+  if(!track)return;
+  var ruler=document.getElementById('tlRuler');
+  TL.blocks=buildTimelineBlocks();
+
+  /* Render ruler marks */
+  var rulerHTML='';
+  var markInterval=3; /* hours between major marks; adjust by zoom */
+  var z=TL.zoom;
+  if(z>=8) markInterval=0.25;  /* 15 min */
+  else if(z>=4) markInterval=1; /* 1h */
+  else if(z>=2) markInterval=2; /* 2h */
+  else markInterval=3;          /* 3h */
+
+  rulerHTML+=rulerMark(0,'00:00','major');
+  for(var h=markInterval; h<24; h+=markInterval){
+    var min=(h%1)*60;
+    var label=Math.floor(h).toString().padStart(2,'0')+':'+min.toString().padStart(2,'0');
+    rulerHTML+=rulerMark((h/24)*100,label, h%3===0?'major':'minor');
+  }
+  rulerHTML+=rulerMark(100,'24:00','major');
+  ruler.innerHTML=rulerHTML;
+
+  /* Render blocks */
+  var html='';
+  TL.blocks.forEach(function(b){
+    var sizeClass='';
+    if(b.width<1.5) sizeClass=' tiny';
+    else if(b.width<6) sizeClass=' small';
+    var label=b.process+(b.title?' — '+b.title.slice(0,20):'');
+    var sub=formatDuration(b.duration);
+    html+='<div class="tl-block'+sizeClass+'" data-idx="'+TL.blocks.indexOf(b)+'" style="left:'+b.left+'%;width:'+b.width+'%;background:'+b.color+'">'
+      +'<div class="bl">'+label+'</div>'
+      +'<div class="bs">'+b.start.slice(11,16)+' — '+sub+'</div>'
+      +'</div>';
+  });
+  track.innerHTML=html;
+
+  /* Hover tooltip */
+  track.querySelectorAll('.tl-block').forEach(function(el){
+    el.addEventListener('mouseenter',function(e){
+      var idx=parseInt(el.dataset.idx);
+      var b=TL.blocks[idx]; if(!b)return;
+      var ttip=document.getElementById('tlTooltip')||createTooltip();
+      ttip.innerHTML='<div class="tt-cat" style="background:'+b.color+'22;color:'+b.color+'">'+b.cat+'</div>'
+        +'<div class="tt-row"><span class="tt-label">程序</span><span>'+escHtml(b.process)+'</span></div>'
+        +'<div class="tt-row"><span class="tt-label">窗口</span><span>'+escHtml(b.title.slice(0,40))+'</span></div>'
+        +'<div class="tt-row"><span class="tt-label">时间</span><span>'+b.start.slice(11,16)+' — '+secToTimeStr(b.endSec)+'</span></div>'
+        +'<div class="tt-row"><span class="tt-label">时长</span><span>'+formatDuration(b.duration)+'</span></div>';
+      ttip.style.display='block';
+      positionTooltip(e,ttip);
+    });
+    el.addEventListener('mousemove',function(e){
+      var ttip=document.getElementById('tlTooltip');
+      if(ttip) positionTooltip(e,ttip);
+    });
+    el.addEventListener('mouseleave',function(){
+      var ttip=document.getElementById('tlTooltip');
+      if(ttip) ttip.style.display='none';
+    });
+  });
+
+  applyTimelineTransform();
+  updateZoomLabel();
+}
+
+function rulerMark(pct,label,cls){
+  return '<div class="rk '+cls+'" style="left:'+pct+'%">'+label+'</div>';
+}
+
+function formatDuration(s){
+  var h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+  return h?h+'h '+m+'m':m+'m';
+}
+
+function secToTimeStr(sec){
+  var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);
+  return h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0');
+}
+
+var _tooltip=null;
+function createTooltip(){
+  _tooltip=document.createElement('div');
+  _tooltip.id='tlTooltip';_tooltip.className='tl-tooltip';
+  document.body.appendChild(_tooltip);
+  return _tooltip;
+}
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function positionTooltip(e,el){
+  var x=e.clientX+16,y=e.clientY-10;
+  var r=el.getBoundingClientRect();
+  if(x+r.width>window.innerWidth) x=e.clientX-r.width-16;
+  if(y<4) y=4;
+  if(y+r.height>window.innerHeight) y=window.innerHeight-r.height-4;
+  el.style.left=x+'px';el.style.top=y+'px';
+}
+
+function applyTimelineTransform(){
+  var track=document.getElementById('tlTrack');
+  var ruler=document.getElementById('tlRuler');
+  var z=TL.zoom,px=TL.panX;
+  var t='scaleX('+z+') translateX('+px+'px)';
+  if(track) track.style.transform=t;
+  if(ruler) ruler.style.transform=t;
+  updateZoomLabel();
+}
+
+function updateZoomLabel(){
+  var ranges={
+    1:'24h 总览 (1×)',  2:'12h 范围 (2×)',  4:'6h 范围 (4×)',
+    6:'4h 范围 (6×)',   8:'3h 范围 (8×)',  12:'1h 范围 (12×)',
+    16:'45min (16×)'
+  };
+  var z=Math.round(TL.zoom);
+  var label=ranges[z]||(z+'×');
+  var el=document.getElementById('tlZoomLabel');
+  if(el) el.textContent=label;
+}
+
+/* ── Zoom with wheel ── */
+document.getElementById('tlBody')?.addEventListener('wheel',function(e){
+  if(document.getElementById('timelineView').style.display==='none')return;
+  e.preventDefault();
+  var rect=this.getBoundingClientRect();
+  var mouseX=e.clientX-rect.left;  /* mouse position relative to viewport */
+  var oldZoom=TL.zoom;
+  var factor=e.deltaY<0?1.25:0.8;
+  var newZoom=Math.max(1,Math.min(16,oldZoom*factor));
+  if(newZoom===oldZoom)return;
+  /* Keep the point under the mouse stable */
+  /* trackWidth at old zoom = 2400 * oldZoom, at current pan = panX */
+  /* We want mouseX/oldZoom ratio to stay constant */
+  var trackWidth=2400;
+  var contentX=mouseX/TL.zoom;  /* position in 1× coordinate space */
+  TL.panX=mouseX-(contentX*newZoom);
+  TL.zoom=newZoom;
+  document.getElementById('tlZoomSlider').value=newZoom;
+  applyTimelineTransform();
+},{passive:false});
+
+/* ── Pan with drag ── */
+var body=document.getElementById('tlBody');
+body?.addEventListener('mousedown',function(e){
+  if(document.getElementById('timelineView').style.display==='none')return;
+  if(e.button!==0||e.target.closest('.tl-block'))return;  /* allow click on blocks */
+  TL.isDragging=true;
+  TL.dragStartX=e.clientX;
+  TL.dragStartPan=TL.panX;
+  body.style.cursor='grabbing';
+});
+
+document.addEventListener('mousemove',function(e){
+  if(!TL.isDragging)return;
+  var dx=e.clientX-TL.dragStartX;
+  var maxPan=0;
+  var minPan=-(2400*(TL.zoom-1)/TL.zoom*0.95);
+  TL.panX=Math.max(minPan,Math.min(maxPan,TL.dragStartPan+dx));
+  applyTimelineTransform();
+});
+
+document.addEventListener('mouseup',function(){
+  if(TL.isDragging){
+    TL.isDragging=false;
+    if(body) body.style.cursor='grab';
+  }
+});
+
+/* ── Zoom slider ── */
+document.getElementById('tlZoomSlider')?.addEventListener('input',function(){
+  var newZoom=parseFloat(this.value);
+  /* Center the view when using slider */
+  var viewportWidth=document.getElementById('tlBody').clientWidth;
+  TL.panX=viewportWidth/2-(2400*newZoom/2);
+  TL.zoom=newZoom;
+  applyTimelineTransform();
+});
+
+/* ── Zoom buttons ── */
+document.getElementById('tlZoomOut')?.addEventListener('click',function(){
+  TL.zoom=Math.max(1,TL.zoom/1.25);
+  document.getElementById('tlZoomSlider').value=TL.zoom;
+  applyTimelineTransform();
+});
+document.getElementById('tlZoomIn')?.addEventListener('click',function(){
+  TL.zoom=Math.min(16,TL.zoom*1.25);
+  document.getElementById('tlZoomSlider').value=TL.zoom;
+  applyTimelineTransform();
+});
+
 /* ── Events ── */
+/* ── Time range switching — also handles timeline tab ── */
 document.getElementById('timeTabs').addEventListener('click',function(e){
   var t=e.target.closest('.tab');if(!t||!t.dataset.r)return;
   document.querySelectorAll('#timeTabs .tab').forEach(function(x){x.classList.remove('active');});
-  t.classList.add('active');state.range=t.dataset.r;state.drill=null;state.hlKey=null;
-  document.getElementById('bread').style.display='none';refresh();
+  t.classList.add('active');
+  if(t.dataset.r==='timeline'){
+    document.getElementById('statsView').style.display='none';
+    document.getElementById('timelineView').style.display='block';
+    renderTimelineChart();
+  }else{
+    document.getElementById('statsView').style.display='';
+    document.getElementById('timelineView').style.display='none';
+    state.range=t.dataset.r;state.drill=null;state.hlKey=null;
+    document.getElementById('bread').style.display='none';refresh();
+  }
 });
 document.querySelector('#app .toolbar').addEventListener('click',function(e){
   var b=e.target.closest('.tb');if(!b)return;
