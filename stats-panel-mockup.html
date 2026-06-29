@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>时间统计 — 统计面板设计稿</title>
+<style>
+  :root {
+    --bg-deep:     #16181D;
+    --bg-surface:  #1E2027;
+    --bg-card:     #24262E;
+    --border:      #2E3039;
+    --text-primary:#EAE4D9;
+    --text-secondary:#9B958A;
+    --text-muted:  #5E5A54;
+    --accent:      #D4956B;
+    --accent-glow: #E8B48A;
+    --work:        #7BA78E;
+    --entertainment: #D4956B;
+    --browse:      #7B9EC7;
+    --communicate: #A78BB5;
+    --system:      #6B6B6B;
+    --other:       #5A5A5A;
+    --font-mono:   'Cascadia Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+    --font-ui:     'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    display: flex; justify-content: center; align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  .panel {
+    width: 840px;
+    background: var(--bg-surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.5);
+  }
+
+  /* ---- Top tabs ---- */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    align-items: center;
+  }
+  .tab {
+    padding: 14px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.2s, border-color 0.2s;
+    letter-spacing: 0.02em;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text-primary); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-spacer { flex: 1; }
+  .tab-settings {
+    padding: 14px 8px;
+    font-size: 16px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .tab-settings:hover { color: var(--accent); }
+
+  /* Custom date range */
+  .custom-range {
+    display: none; align-items: center; gap: 6px;
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+  .custom-range.show { display: flex; }
+  .custom-range input[type="date"] {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .custom-range input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
+  .custom-range .range-sep {
+    color: var(--text-muted); font-size: 12px;
+  }
+  .custom-range .range-apply {
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #1A1C21;
+    font-weight: 600;
+  }
+
+  /* ---- Content ---- */
+  .content { padding: 20px 28px 24px; }
+
+  /* ---- Toolbar ---- */
+  .toolbar {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .toolbar-group {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .toolbar-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+  }
+  .toggle-group {
+    display: flex;
+    background: var(--bg-card);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .toggle-btn {
+    padding: 5px 14px;
+    font-size: 12px;
+    font-family: var(--font-ui);
+    color: var(--text-secondary);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .toggle-btn:hover { color: var(--text-primary); }
+  .toggle-btn.active {
+    background: var(--accent);
+    color: #1A1C21;
+    font-weight: 600;
+  }
+  .toolbar-spacer { flex: 1; }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    font-size: 12px; color: var(--text-secondary);
+    display: none; align-items: center; gap: 4px;
+  }
+  .breadcrumb.show { display: flex; }
+  .breadcrumb .back {
+    color: var(--accent); cursor: pointer; font-weight: 500;
+  }
+  .breadcrumb .back:hover { color: var(--accent-glow); }
+  .breadcrumb .sep { color: var(--text-muted); }
+
+  /* ---- Main row ---- */
+  .main-row { display: flex; gap: 32px; margin-bottom: 24px; min-height: 260px; }
+
+  /* ---- Chart Area ---- */
+  .chart-area {
+    flex-shrink: 0;
+    width: 240px; height: 240px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .chart-area svg.donut-chart { overflow: visible; }
+  .donut-segment {
+    cursor: pointer;
+    transition: stroke-width 0.18s ease, opacity 0.18s ease, filter 0.18s ease;
+  }
+  .donut-segment:hover {
+    stroke-width: 26;
+  }
+  .donut-segment.dimmed {
+    opacity: 0.25;
+  }
+  .donut-segment.emphasized {
+    stroke-width: 26;
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+
+  /* Chart tooltip */
+  .chart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    text-align: center;
+    opacity: 0;
+    transform: translate(-50%, -120%);
+    transition: opacity 0.15s;
+    z-index: 10;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+  .chart-tooltip.show { opacity: 1; }
+  .chart-tooltip .tt-cat {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .chart-tooltip .tt-time {
+    font-family: var(--font-mono); font-size: 16px; font-weight: 600;
+    color: var(--text-primary); margin-top: 2px;
+  }
+  .chart-tooltip .tt-pct {
+    font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);
+  }
+  .chart-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -6px; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid var(--bg-card);
+  }
+
+  .chart-center {
+    position: absolute;
+    text-align: center;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .chart-center .total-time {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .chart-center .total-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* ---- Bar Chart ---- */
+  .bar-chart-wrap {
+    flex-shrink: 0;
+    width: 240px;
+    display: none; flex-direction: column; justify-content: center;
+    gap: 8px;
+    min-height: 240px;
+  }
+  .bar-chart-wrap.show { display: flex; }
+  .bar-row {
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer;
+  }
+  .bar-label-text {
+    font-size: 10px; color: var(--text-secondary);
+    width: 32px; text-align: right; flex-shrink: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.1;
+  }
+  .bar-label-icon {
+    width: 22px; height: 22px; border-radius: 4px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+  }
+  .bar-track-wrap {
+    flex: 1; height: 26px; position: relative;
+  }
+  .bar-track-bg {
+    position: absolute; inset: 0;
+    background: var(--bg-card); border-radius: 4px;
+  }
+  .bar-track-fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    border-radius: 4px;
+    min-width: 4px;
+    transition: width 0.4s ease, opacity 0.18s;
+  }
+  .bar-track-val {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-primary); font-weight: 500;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  }
+  .bar-track-pct {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--text-muted);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.18s;
+  }
+  .bar-row:hover .bar-track-pct { opacity: 1; }
+  .bar-row:hover .bar-track-val { opacity: 0; }
+  .bar-row.dimmed .bar-track-fill { opacity: 0.25; }
+
+  /* ---- Breakdown List ---- */
+  .breakdown {
+    flex: 1; display: flex; flex-direction: column; gap: 5px;
+    min-height: 240px;
+  }
+  .breakdown-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: all 0.18s;
+    user-select: none;
+  }
+  .breakdown-item:hover { background: #2C2E36; }
+  .breakdown-item.highlighted {
+    background: #2A2E35;
+    box-shadow: inset 0 0 0 1px rgba(212,149,107,0.4);
+  }
+  .breakdown-item.dimmed:not(.highlighted) {
+    opacity: 0.35;
+  }
+
+  .pgm-icon {
+    width: 28px; height: 28px;
+    border-radius: 5px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    font-family: var(--font-ui);
+    color: #fff;
+  }
+  .breakdown-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px; flex-shrink: 0;
+  }
+  .breakdown-info { flex: 1; min-width: 0; }
+  .breakdown-name {
+    font-size: 13px; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .breakdown-sub {
+    font-size: 11px; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .breakdown-bar-bg {
+    width: 70px; height: 3px; background: var(--border); border-radius: 2px;
+    overflow: hidden; flex-shrink: 0;
+  }
+  .breakdown-bar-fill { height: 100%; border-radius: 2px; }
+  .breakdown-time {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    width: 60px; text-align: right; flex-shrink: 0;
+  }
+  .breakdown-pct {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 36px; text-align: right; flex-shrink: 0;
+  }
+
+  /* ---- Timeline ---- */
+  .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .timeline { display: flex; flex-direction: column; gap: 2px; }
+  .timeline-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: background 0.12s;
+  }
+  .timeline-row:hover { background: var(--bg-card); }
+  .timeline-time {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 48px; flex-shrink: 0;
+  }
+  .timeline-icon {
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+    color: #fff;
+  }
+  .timeline-title {
+    flex: 1; font-size: 12px; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .timeline-duration {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    width: 56px; text-align: right; flex-shrink: 0;
+  }
+  .timeline-cat {
+    font-size: 10px;
+    padding: 2px 8px; border-radius: 3px;
+    font-weight: 500;
+    width: 44px; text-align: center; flex-shrink: 0;
+  }
+
+  /* ---- Footer ---- */
+  .footer {
+    display: flex; gap: 10px; justify-content: flex-end;
+    margin-top: 24px; padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .btn {
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: var(--font-ui);
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+  .btn:hover { color: var(--text-primary); border-color: #4A4D56; }
+  .btn.primary {
+    background: var(--accent);
+    color: #1A1C21;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: var(--accent-glow); border-color: var(--accent-glow); }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <!-- Tabs -->
+  <div class="tabs" id="timeTabs">
+    <div class="tab active" data-range="today">今日</div>
+    <div class="tab" data-range="week">本周</div>
+    <div class="tab" data-range="month">本月</div>
+    <div class="tab" data-range="custom">自定义</div>
+    <div class="tab-spacer"></div>
+    <div class="tab-settings" title="设置">⚙</div>
+  </div>
+
+  <!-- Custom date range bar -->
+  <div class="custom-range" id="customRange">
+    <input type="date" id="dateFrom" value="2026-06-01">
+    <span class="range-sep">—</span>
+    <input type="date" id="dateTo" value="2026-06-29">
+    <button class="range-apply" id="rangeApply">应用</button>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <span class="toolbar-label">视图</span>
+        <div class="toggle-group" id="viewToggle">
+          <button class="toggle-btn active" data-view="category">按分类</button>
+          <button class="toggle-btn" data-view="program">按程序</button>
+        </div>
+      </div>
+      <div class="toolbar-group">
+        <span class="toolbar-label">图表</span>
+        <div class="toggle-group" id="chartToggle">
+          <button class="toggle-btn active" data-chart="donut">饼图</button>
+          <button class="toggle-btn" data-chart="bar">柱状图</button>
+        </div>
+      </div>
+      <div class="toolbar-spacer"></div>
+      <div class="breadcrumb" id="breadcrumb">
+        <span class="back" id="breadBack">← 返回全部</span>
+        <span class="sep">|</span>
+        <span id="breadLabel"></span>
+      </div>
+    </div>
+
+    <!-- Main: Chart + Breakdown -->
+    <div class="main-row">
+
+      <!-- Donut Chart -->
+      <div class="chart-area" id="donutChart">
+        <svg class="donut-chart" width="230" height="230" viewBox="0 0 230 230" id="donutSvg">
+        </svg>
+        <div class="chart-tooltip" id="chartTooltip">
+          <div class="tt-cat"></div>
+          <div class="tt-time"></div>
+          <div class="tt-pct"></div>
+        </div>
+        <div class="chart-center">
+          <div class="total-time" id="totalTime">8h 22m</div>
+          <div class="total-label" id="totalLabel">今日用时</div>
+        </div>
+      </div>
+
+      <!-- Bar Chart -->
+      <div class="bar-chart-wrap" id="barChart">
+      </div>
+
+      <!-- Breakdown List -->
+      <div class="breakdown" id="breakdownList">
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="section-label">时间线</div>
+    <div class="timeline" id="timeline">
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <button class="btn">导出 Excel</button>
+      <button class="btn primary">导出 CSV</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Color palette ────────────────────────────────
+const catColors = {
+  '工作': '#7BA78E', '娱乐': '#D4956B', '浏览': '#7B9EC7',
+  '通讯': '#A78BB5', '其他': '#5A5A5A'
+};
+const catColorsLight = {
+  '工作': '#A3D4B8', '娱乐': '#E8B48A', '浏览': '#A8C4E0',
+  '通讯': '#C4A8D4', '其他': '#8A8A8A'
+};
+
+// ── Data sets for different time ranges ──────────
+const dataSets = {
+  today: {
+    label: '今日用时',
+    totalSecs: 30120,
+    catAgg: { '工作': 18420, '娱乐': 6480, '浏览': 3120, '通讯': 1260, '其他': 840 },
+    catPrograms: {
+      '工作': [
+        { icon:'V',iconBg:'#007ACC',name:'Code.exe',sub:'Visual Studio Code',secs:7800},
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'GitHub / Stack Overflow',secs:3720},
+        { icon:'T',iconBg:'#2F7B9E',name:'WindowsTerminal.exe',sub:'Windows Terminal',secs:2100},
+      ],
+      '娱乐': [
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'YouTube / Bilibili',secs:5400},
+        { icon:'S',iconBg:'#0E6B2E',name:'steam.exe',sub:'Steam',secs:1080},
+      ],
+      '浏览': [
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'各种网站',secs:2280},
+        { icon:'E',iconBg:'#1A73E8',name:'msedge.exe',sub:'Microsoft Edge',secs:840},
+      ],
+      '通讯': [
+        { icon:'W',iconBg:'#2DC100',name:'WeChat.exe',sub:'微信',secs:960},
+        { icon:'Q',iconBg:'#12B7F5',name:'QQ.exe',sub:'QQ',secs:300},
+      ],
+      '其他': [
+        { icon:'E',iconBg:'#999',name:'explorer.exe',sub:'文件资源管理器',secs:480},
+        { icon:'S',iconBg:'#666',name:'SearchHost.exe',sub:'Windows 搜索',secs:360},
+      ],
+    },
+    timeline: [
+      {time:'09:00',icon:'V',iconBg:'#007ACC',title:'myproject — VS Code',dur:'2h 10m',cat:'工作'},
+      {time:'11:10',icon:'C',iconBg:'#E8833A',title:'YouTube — Chrome',dur:'1h 30m',cat:'娱乐'},
+      {time:'12:40',icon:'C',iconBg:'#E8833A',title:'GitHub — Chrome',dur:'47m',cat:'工作'},
+      {time:'13:27',icon:'W',iconBg:'#2DC100',title:'微信',dur:'16m',cat:'通讯'},
+      {time:'13:43',icon:'V',iconBg:'#007ACC',title:'design-doc.md — VS Code',dur:'2h 02m',cat:'工作'},
+      {time:'15:45',icon:'C',iconBg:'#E8833A',title:'Stack Overflow — Chrome',dur:'32m',cat:'工作'},
+      {time:'16:17',icon:'V',iconBg:'#007ACC',title:'app.py — VS Code',dur:'1h 05m',cat:'工作'},
+    ]
+  },
+  week: {
+    label: '本周用时',
+    totalSecs: 172800,
+    catAgg: { '工作': 100800, '娱乐': 36000, '浏览': 18000, '通讯': 10800, '其他': 7200 },
+    catPrograms: {
+      '工作': [
+        { icon:'V',iconBg:'#007ACC',name:'Code.exe',sub:'Visual Studio Code',secs:46800},
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'GitHub / Jira / Confluence',secs:32400},
+        { icon:'T',iconBg:'#2F7B9E',name:'WindowsTerminal.exe',sub:'Windows Terminal',secs:14400},
+      ],
+      '娱乐': [
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'YouTube / Bilibili / Netflix',secs:25200},
+        { icon:'S',iconBg:'#0E6B2E',name:'steam.exe',sub:'Steam',secs:7200},
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'Douyin',secs:3600},
+      ],
+      '浏览': [
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'各种网站',secs:14400},
+        { icon:'E',iconBg:'#1A73E8',name:'msedge.exe',sub:'Microsoft Edge',secs:3600},
+      ],
+      '通讯': [
+        { icon:'W',iconBg:'#2DC100',name:'WeChat.exe',sub:'微信',secs:7200},
+        { icon:'Q',iconBg:'#12B7F5',name:'QQ.exe',sub:'QQ',secs:3600},
+      ],
+      '其他': [
+        { icon:'E',iconBg:'#999',name:'explorer.exe',sub:'文件资源管理器',secs:3600},
+        { icon:'N',iconBg:'#5C2D91',name:'notepad++.exe',sub:'Notepad++',secs:3600},
+      ],
+    },
+    timeline: [
+      {time:'周一',icon:'V',iconBg:'#007ACC',title:'VS Code — 开发工作',dur:'14h 20m',cat:'工作'},
+      {time:'周一',icon:'C',iconBg:'#E8833A',title:'YouTube — Chrome',dur:'5h 40m',cat:'娱乐'},
+      {time:'周二',icon:'V',iconBg:'#007ACC',title:'VS Code — Code Review',dur:'12h 10m',cat:'工作'},
+    ]
+  },
+  month: {
+    label: '本月用时',
+    totalSecs: 604800,
+    catAgg: { '工作': 345600, '娱乐': 129600, '浏览': 57600, '通讯': 43200, '其他': 28800 },
+    catPrograms: {
+      '工作': [
+        { icon:'V',iconBg:'#007ACC',name:'Code.exe',sub:'Visual Studio Code',secs:172800},
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'GitHub / Jira / Confluence',secs:103680},
+        { icon:'T',iconBg:'#2F7B9E',name:'WindowsTerminal.exe',sub:'Windows Terminal',secs:46080},
+      ],
+      '娱乐': [
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'YouTube / Bilibili / Netflix',secs:86400},
+        { icon:'S',iconBg:'#0E6B2E',name:'steam.exe',sub:'Steam',secs:28800},
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'Douyin',secs:14400},
+      ],
+      '浏览': [
+        { icon:'C',iconBg:'#E8833A',name:'chrome.exe',sub:'各种网站',secs:43200},
+        { icon:'E',iconBg:'#1A73E8',name:'msedge.exe',sub:'Microsoft Edge',secs:14400},
+      ],
+      '通讯': [
+        { icon:'W',iconBg:'#2DC100',name:'WeChat.exe',sub:'微信',secs:28800},
+        { icon:'Q',iconBg:'#12B7F5',name:'QQ.exe',sub:'QQ',secs:14400},
+      ],
+      '其他': [
+        { icon:'E',iconBg:'#999',name:'explorer.exe',sub:'文件资源管理器',secs:14400},
+        { icon:'N',iconBg:'#5C2D91',name:'notepad++.exe',sub:'Notepad++',secs:14400},
+      ],
+    },
+    timeline: [
+      {time:'第1周',icon:'V',iconBg:'#007ACC',title:'VS Code — 开发工作',dur:'48h 00m',cat:'工作'},
+      {time:'第1周',icon:'C',iconBg:'#E8833A',title:'YouTube — Chrome',dur:'22h 30m',cat:'娱乐'},
+      {time:'第2周',icon:'V',iconBg:'#007ACC',title:'VS Code — 新功能开发',dur:'42h 15m',cat:'工作'},
+    ]
+  }
+};
+
+// ── State ─────────────────────────────────────────
+let state = {
+  timeRange: 'today',      // 'today' | 'week' | 'month' | 'custom'
+  viewMode: 'category',    // 'category' | 'program'
+  chartType: 'donut',      // 'donut' | 'bar'
+  drillCat: null,          // null | '工作' | ...
+  hoverCat: null,          // currently hovered category (for chart↔list sync)
+};
+
+// ── Derived data helpers ─────────────────────────
+function getData() { return dataSets[state.timeRange] || dataSets.today; }
+
+function catBreakdown() {
+  const d = getData();
+  return Object.entries(d.catAgg)
+    .sort((a, b) => b[1] - a[1])
+    .map(([cat, secs]) => ({ cat, secs, pct: Math.round(secs / d.totalSecs * 100) }));
+}
+
+function allPrograms() {
+  const d = getData();
+  const progs = Object.entries(d.catPrograms).flatMap(([cat, list]) =>
+    list.map(p => ({ ...p, category: cat }))
+  );
+  // Merge same-named programs (e.g. chrome.exe appearing in multiple categories)
+  const merged = {};
+  progs.forEach(p => {
+    if (!merged[p.name]) merged[p.name] = { ...p, secs: 0, categories: new Set() };
+    merged[p.name].secs += p.secs;
+    merged[p.name].categories.add(p.category);
+  });
+  return Object.values(merged).sort((a, b) => b.secs - a.secs).map(p => ({
+    ...p, category: [...p.categories][0] // primary category for color
+  }));
+}
+
+function fmtTime(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// ── Render: Donut Chart ──────────────────────────
+function renderDonut(items) {
+  const svg = document.getElementById('donutSvg');
+  const cx = 115, cy = 115, r = 80;
+  const circ = 2 * Math.PI * r; // ≈ 502.65
+  const d = getData();
+  const totalS = items.reduce((s, i) => s + i.secs, 0);
+
+  let offset = 0;
+  let html = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+    stroke="#2E3039" stroke-width="22" opacity="0.35" class="donut-bg"/>`;
+
+  items.forEach((item, idx) => {
+    const dashLen = (item.secs / totalS) * circ;
+    const dashGap = circ - dashLen;
+    // Program items use their icon color; category items use category color
+    const color = item.iconBg || catColors[item.cat || item.category] || '#5A5A5A';
+    const hk = item.hk || item.cat || item.category || '';
+
+    const isEmphasized = state.hoverCat === hk;
+    const isDimmed = state.hoverCat && state.hoverCat !== hk;
+    let cls = 'donut-segment';
+    if (isEmphasized) cls += ' emphasized';
+    else if (isDimmed) cls += ' dimmed';
+
+    html += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+      stroke="${color}" stroke-width="${isEmphasized ? 28 : 22}"
+      stroke-dasharray="${dashLen.toFixed(2)} ${dashGap.toFixed(2)}"
+      stroke-dashoffset="${(-offset).toFixed(2)}"
+      stroke-linecap="butt"
+      class="${cls}"
+      data-hk="${hk}"
+      data-idx="${idx}"/>`;
+    offset += dashLen;
+  });
+
+  // Tick ring
+  html += `<circle cx="${cx}" cy="${cy}" r="95" fill="none"
+    stroke="#2E3039" stroke-width="1"
+    stroke-dasharray="1 15.8" stroke-dashoffset="0"/>`;
+
+  svg.innerHTML = html;
+
+  // Attach hover events to segments
+  svg.querySelectorAll('.donut-segment').forEach(seg => {
+    seg.addEventListener('mouseenter', () => {
+      const hk = seg.dataset.hk;
+      highlightCategory(hk);
+      showTooltip(seg, hk);
+    });
+    seg.addEventListener('mouseleave', () => {
+      highlightCategory(null);
+      hideTooltip();
+    });
+  });
+
+  // Hover on background area → reset
+  svg.querySelector('.donut-bg').addEventListener('mouseenter', () => {
+    highlightCategory(null); hideTooltip();
+  });
+}
+
+function showTooltip(seg, key) {
+  const tooltip = document.getElementById('chartTooltip');
+  const d = getData();
+  // key can be a category or a program name - find the matching item
+  let secs = 0, label = key;
+  if (d.catAgg[key] !== undefined) {
+    secs = d.catAgg[key];
+  } else {
+    // Look up in program data
+    const allP = allPrograms();
+    const found = allP.find(p => p.name === key);
+    if (found) { secs = found.secs; label = found.name; }
+  }
+  const pct = Math.round(secs / d.totalSecs * 100);
+  tooltip.querySelector('.tt-cat').textContent = label;
+  tooltip.querySelector('.tt-time').textContent = fmtTime(secs);
+  tooltip.querySelector('.tt-pct').textContent = pct + '%';
+  tooltip.classList.add('show');
+
+  // Position tooltip near the middle of the segment
+  const rect = seg.getBoundingClientRect();
+  const parentRect = seg.parentElement.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2 - parentRect.left + 10;
+  const cy = rect.top + rect.height / 2 - parentRect.top - 10;
+  tooltip.style.left = cx + 'px';
+  tooltip.style.top = cy + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('chartTooltip').classList.remove('show');
+}
+
+// ── Render: Bar Chart ────────────────────────────
+function renderBarChart(items) {
+  const container = document.getElementById('barChart');
+  const maxSecs = Math.max(...items.map(i => i.secs), 1);
+
+  container.innerHTML = items.map(item => {
+    const pct = Math.round(item.secs / maxSecs * 100);
+    // Program items use their icon color; category items use category color
+    const color = item.iconBg || catColors[item.cat || item.category] || '#5A5A5A';
+    const hk = item.hk || item.cat || item.category || '';
+    const isDimmed = state.hoverCat && state.hoverCat !== hk;
+    const isHL = state.hoverCat === hk;
+    const label = (item.name || item.cat || '').slice(0, 4);
+    const hasIcon = !!item.icon;
+
+    return `<div class="bar-row${isDimmed ? ' dimmed' : ''}${isHL ? ' highlighted' : ''}"
+                data-hk="${hk}">
+      ${hasIcon
+        ? `<div class="bar-label-icon" style="background:${item.iconBg}">${item.icon}</div>`
+        : `<span class="bar-label-text">${label}</span>`}
+      <div class="bar-track-wrap">
+        <div class="bar-track-bg"></div>
+        <div class="bar-track-fill" style="width:${Math.max(pct, 3)}%;background:${color}"></div>
+        ${pct > 25
+          ? `<span class="bar-track-val">${fmtTime(item.secs)}</span>`
+          : `<span class="bar-track-val" style="right:calc(100% - ${Math.max(pct,3)}% - 50px);color:${color}">${fmtTime(item.secs)}</span>`}
+        <span class="bar-track-pct">${Math.round(item.secs / getData().totalSecs * 100)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Hover events on bar rows
+  container.querySelectorAll('.bar-row').forEach(row => {
+    row.addEventListener('mouseenter', () => {
+      highlightCategory(row.dataset.hk || null);
+    });
+    row.addEventListener('mouseleave', () => {
+      highlightCategory(null);
+    });
+  });
+}
+
+// ── Render: Breakdown List ───────────────────────
+function renderBreakdown() {
+  const list = document.getElementById('breakdownList');
+  const bread = document.getElementById('breadcrumb');
+  const label = document.getElementById('breadLabel');
+  const d = getData();
+
+  let items;
+  if (state.viewMode === 'category') {
+    if (state.drillCat) {
+      bread.classList.add('show');
+      label.textContent = state.drillCat;
+      items = (d.catPrograms[state.drillCat] || []).map(p => ({
+        type: 'program', ...p, category: state.drillCat
+      }));
+    } else {
+      bread.classList.remove('show');
+      items = catBreakdown().map(c => ({ type: 'category', ...c }));
+    }
+  } else {
+    bread.classList.remove('show');
+    items = allPrograms().map(p => ({ type: 'program', ...p }));
+  }
+
+  list.innerHTML = items.map(item => {
+    // Determine highlight key: category items use cat, program items use name
+    const hk = item.type === 'category' ? item.cat : (item.name || item.category);
+    const isHL = state.hoverCat && state.hoverCat === hk;
+    const isDimmed = state.hoverCat && !isHL;
+
+    if (item.type === 'category') {
+      const cls = (isHL ? 'highlighted' : '') + (isDimmed ? ' dimmed' : '');
+      return `<div class="breakdown-item ${cls}" data-hk="${item.cat}">
+        <div class="breakdown-dot" style="background:${catColors[item.cat]}"></div>
+        <div class="breakdown-info">
+          <div class="breakdown-name">${item.cat}</div>
+        </div>
+        <div class="breakdown-bar-bg"><div class="breakdown-bar-fill" style="width:${item.pct}%;background:${catColors[item.cat]}"></div></div>
+        <span class="breakdown-time">${fmtTime(item.secs)}</span>
+        <span class="breakdown-pct">${item.pct}%</span>
+      </div>`;
+    } else {
+      const color = catColors[item.category] || '#5A5A5A';
+      const baseSecs = state.drillCat ? (d.catAgg[state.drillCat] || 1) : d.totalSecs;
+      const pct = Math.round(item.secs / baseSecs * 100);
+      const cls = (isHL ? 'highlighted' : '') + (isDimmed ? ' dimmed' : '');
+      return `<div class="breakdown-item ${cls}" data-hk="${hk}">
+        <div class="pgm-icon" style="background:${item.iconBg}">${item.icon}</div>
+        <div class="breakdown-info">
+          <div class="breakdown-name">${item.name}</div>
+          <div class="breakdown-sub">${item.sub}</div>
+        </div>
+        <div class="breakdown-bar-bg"><div class="breakdown-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span class="breakdown-time">${item.time || fmtTime(item.secs)}</span>
+        <span class="breakdown-pct">${pct}%</span>
+      </div>`;
+    }
+  }).join('');
+
+  // Click: drill into category
+  list.querySelectorAll('.breakdown-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const hk = el.dataset.hk;
+      if (state.viewMode === 'category' && !state.drillCat && hk && catColors[hk]) {
+        drillInto(hk);
+      }
+    });
+    // Hover: highlight chart segment
+    el.addEventListener('mouseenter', () => {
+      highlightCategory(el.dataset.hk || null);
+    });
+    el.addEventListener('mouseleave', () => {
+      highlightCategory(null);
+    });
+  });
+
+  // Breadcrumb back
+  document.getElementById('breadBack').onclick = () => {
+    state.drillCat = null;
+    renderAll();
+  };
+}
+
+// ── Highlight sync ──────────────────────────────
+function highlightCategory(cat) {
+  const prev = state.hoverCat;
+  state.hoverCat = cat;
+  if (prev === cat) return;
+  // Re-render only the visual parts that need updating
+  refreshChartHighlight();
+  refreshBreakdownHighlight();
+  refreshBarHighlight();
+}
+
+function refreshChartHighlight() {
+  const svg = document.getElementById('donutSvg');
+  if (!svg) return;
+  svg.querySelectorAll('.donut-segment').forEach(seg => {
+    const hk = seg.dataset.hk;
+    if (!state.hoverCat) {
+      seg.classList.remove('emphasized', 'dimmed');
+      seg.setAttribute('stroke-width', '22');
+    } else if (hk === state.hoverCat) {
+      seg.classList.add('emphasized');
+      seg.classList.remove('dimmed');
+      seg.setAttribute('stroke-width', '28');
+    } else {
+      seg.classList.add('dimmed');
+      seg.classList.remove('emphasized');
+      seg.setAttribute('stroke-width', '22');
+    }
+  });
+}
+
+function refreshBreakdownHighlight() {
+  const list = document.getElementById('breakdownList');
+  list.querySelectorAll('.breakdown-item').forEach(el => {
+    const hk = el.dataset.hk;
+    if (!state.hoverCat) {
+      el.classList.remove('highlighted', 'dimmed');
+    } else if (hk === state.hoverCat) {
+      el.classList.add('highlighted');
+      el.classList.remove('dimmed');
+    } else {
+      el.classList.add('dimmed');
+      el.classList.remove('highlighted');
+    }
+  });
+}
+
+function refreshBarHighlight() {
+  const bc = document.getElementById('barChart');
+  bc.querySelectorAll('.bar-row').forEach(row => {
+    const hk = row.dataset.hk;
+    if (!state.hoverCat) {
+      row.classList.remove('highlighted', 'dimmed');
+    } else if (hk === state.hoverCat) {
+      row.classList.add('highlighted');
+      row.classList.remove('dimmed');
+    } else {
+      row.classList.add('dimmed');
+      row.classList.remove('highlighted');
+    }
+  });
+}
+
+// ── Drill down ───────────────────────────────────
+function drillInto(cat) {
+  state.drillCat = cat;
+  renderAll();
+}
+
+// ── Sync chart visibility ────────────────────────
+function syncChart() {
+  const dc = document.getElementById('donutChart');
+  const bc = document.getElementById('barChart');
+  const d = getData();
+
+  let items;
+  if (state.viewMode === 'category') {
+    if (state.drillCat) {
+      items = (d.catPrograms[state.drillCat] || []).map(p => ({
+        cat: state.drillCat, secs: p.secs, name: p.name, icon: p.icon, iconBg: p.iconBg,
+        hk: p.name  // highlight by program name when drilled down
+      }));
+    } else {
+      items = catBreakdown().map(c => ({ cat: c.cat, secs: c.secs, hk: c.cat }));
+    }
+  } else {
+    // Program view: each program is independently highlighted
+    items = allPrograms().map(p => ({
+      cat: p.category, secs: p.secs, name: p.name, icon: p.icon, iconBg: p.iconBg,
+      hk: p.name  // highlight key = program name (unique per program)
+    }));
+  }
+
+  if (state.chartType === 'donut') {
+    dc.style.display = 'flex';
+    bc.classList.remove('show');
+    renderDonut(items);
+  } else {
+    dc.style.display = 'none';
+    bc.classList.add('show');
+    renderBarChart(items);
+  }
+}
+
+// ── Timeline ─────────────────────────────────────
+function renderTimeline() {
+  const tl = document.getElementById('timeline');
+  const d = getData();
+  tl.innerHTML = d.timeline.map(row => `
+    <div class="timeline-row">
+      <span class="timeline-time">${row.time}</span>
+      <div class="timeline-icon" style="background:${row.iconBg}">${row.icon}</div>
+      <span class="timeline-title">${row.title}</span>
+      <span class="timeline-duration">${row.dur}</span>
+      <span class="timeline-cat" style="background:${hexToRgba(catColors[row.cat],0.18)}; color:${catColors[row.cat]}">${row.cat}</span>
+    </div>
+  `).join('');
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ── Master render ────────────────────────────────
+function renderAll() {
+  syncChart();
+  renderBreakdown();
+  renderTimeline();
+  const d = getData();
+  document.getElementById('totalTime').textContent = fmtTime(d.totalSecs);
+  document.getElementById('totalLabel').textContent = d.label;
+}
+
+// ── Tabs ─────────────────────────────────────────
+document.getElementById('timeTabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab || tab.dataset.range === undefined) return;
+  document.querySelectorAll('#timeTabs .tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  state.timeRange = tab.dataset.range;
+  state.drillCat = null;
+  document.getElementById('customRange').classList.toggle('show', state.timeRange === 'custom');
+  renderAll();
+});
+
+document.getElementById('rangeApply').addEventListener('click', () => {
+  // Simulate custom range - just keep using 'month' data for now
+  state.drillCat = null;
+  renderAll();
+});
+
+// ── Toolbars ─────────────────────────────────────
+document.getElementById('viewToggle').addEventListener('click', e => {
+  if (!e.target.classList.contains('toggle-btn')) return;
+  document.querySelectorAll('#viewToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  state.viewMode = e.target.dataset.view;
+  state.drillCat = null;
+  state.hoverCat = null;
+  renderAll();
+});
+
+document.getElementById('chartToggle').addEventListener('click', e => {
+  if (!e.target.classList.contains('toggle-btn')) return;
+  document.querySelectorAll('#chartToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  state.chartType = e.target.dataset.chart;
+  state.hoverCat = null;
+  renderAll();
+});
+
+// ── Init ─────────────────────────────────────────
+renderAll();
+</script>
+
+</body>
+</html>
