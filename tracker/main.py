@@ -38,8 +38,8 @@ class TimeTracker:
         storage.insert_activity(process, window_title, cat, sd.strftime("%Y-%m-%d %H:%M:%S"), dur, sd.strftime("%Y-%m-%d"))
         storage.upsert_daily_summary(sd.strftime("%Y-%m-%d"), cat, dur)
 
-    def _on_idle(self): pass
-    def _on_resume(self): pass
+    def _on_idle(self, session=None): pass
+    def _on_resume(self, session=None): pass
 
     def _update_tooltip(self):
         rows = storage.get_daily_summary(datetime.now().strftime("%Y-%m-%d"))
