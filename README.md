@@ -1,99 +1,106 @@
-# ⏱ Windows 时间追踪器 (TimeTracker)
+# ⏱ TimeTracker
 
-自动记录你在电脑上每个程序/窗口花费的时间，分类统计，交互式时间轴查看。
+Automatic time tracking for Windows — records every program and window you use, categorizes activity, and presents interactive stats in your browser.
 
-## 功能
+[中文文档](README.zh-CN.md)
 
-- **自动追踪** — 后台运行，按窗口标题和进程名自动记录活跃时间
-- **智能分类** — 内置 97 条规则，覆盖开发、办公、设计、浏览器、通讯、游戏、影音等
-- **空闲检测** — 无操作时自动暂停，恢复后继续记录
-- **视频识别** — 检测到播放器/视频网站时单独归类
-- **交互式统计** — 饼图/柱状图、程序排名、分类汇总
-- **时间线 + 时间轴** — 活动列表 + 可缩放/拖拽的 24h 交互式时间轴
-- **系统托盘** — 最小化到托盘，右键菜单操作
-- **便携模式** — 所有数据（配置、数据库）保存在 exe 同目录
+## Features
 
-## 快速开始
+- **Auto-tracking** — runs in the background, logs foreground window activity by process name and window title
+- **Smart classification** — 100+ built-in rules covering development, office, design, browsers, chat, gaming, and media
+- **Idle detection** — pauses automatically when you step away, resumes when you're back
+- **Video detection** — identifies video players and streaming sites for separate categorization
+- **Interactive stats** — donut/bar charts, program rankings, category breakdowns
+- **Timeline** — activity log with a zoomable, draggable 24h timeline view
+- **System tray** — minimizes to tray with right-click menu
+- **Portable** — all data (config, database, icons) stays in the executable's directory
 
-### 直接运行（Python）
+## Quick Start
+
+### Run from source
 
 ```bash
 pip install -r tracker/requirements.txt
 python tracker/main.py
 ```
 
-### 打包为 exe（便携版）
+### Build portable exe
 
 ```bash
 pip install pyinstaller
 pyinstaller --onefile --windowed --name TimeTracker tracker/main.py
 ```
 
-运行 `dist/TimeTracker.exe` 即可。数据文件（`config.json`、`tracker.db`、`icons/`）自动创建在 exe 同目录。
+Run `dist/TimeTracker.exe`. Data files (`config.json`, `tracker.db`, `icons/`) are created automatically next to the exe.
 
-## 使用说明
+### Download
 
-1. 启动程序后，系统托盘出现时钟图标 🕐
-2. 程序自动记录前台窗口的活动时间
-3. 右键托盘图标 → **打开统计** → 浏览器中查看
-4. 右键 → **暂停/继续** → 临时停止记录
-5. 右键 → **设置** → 编辑 `config.json` 中的分类规则
+Grab the latest `TimeTracker.exe` from the [Releases](https://github.com/your-username/your-repo/releases) page, or build it yourself as described above.
 
-### 统计页面
+## Usage
 
-- **今日 / 本周 / 本月** — 切换统计周期
-- **按分类 / 按程序** — 饼图/柱状图切换
-- **分类下钻** — 点击分类查看具体程序详情
-- **时间线** — 按时间顺序的活动列表
-- **时间轴** — 可缩放（滚轮）和拖拽（鼠标拖动）的交互式时间条
+1. Launch the app — a clock icon 🕐 appears in the system tray
+2. It automatically tracks your foreground window activity
+3. **Right-click tray icon → Open Stats** to view in your browser
+4. **Right-click → Pause/Resume** to temporarily stop tracking
+5. **Right-click → Settings** to open `config.json` for rule editing
 
-## 分类规则
+### Stats page
 
-规则存储在 `config.json` 的 `rules` 数组中，每条规则包含：
+- **Today / Week / Month** — switch between time ranges
+- **By Category / By Program** — toggle donut or bar chart view
+- **Drill-down** — click a category to see its programs in detail
+- **Timeline** — chronological activity feed
+- **⚙ Settings** — edit classification rules directly in-page
+
+## Classification Rules
+
+Rules live in `config.json` under the `rules` array. Each rule:
 
 ```json
 {
   "process": "chrome.exe",
   "title_pattern": "GitHub|Jira|Stack Overflow",
-  "category": "工作"
+  "category": "Work"
 }
 ```
 
-- `process` — 进程名（不区分大小写）
-- `title_pattern` — 窗口标题正则（可选，不填则匹配该进程所有窗口）
-- `category` — 分类名称（在 `categories` 中定义颜色）
+- `process` — executable name (case-insensitive)
+- `title_pattern` — optional regex on window title (empty = matches all windows)
+- `category` — must match a key in `categories` (colours defined there)
 
-规则按顺序匹配，**标题优先于进程**。浏览器等通用程序可以通过标题细分不同用途。
+Rules are evaluated in order; **title-pattern rules beat process-only rules**, so browsers can be split by what page is open.
 
-你也可以在统计页面的设置弹窗中直接编辑规则。
+You can also edit rules directly from the stats page (⚙ button) without touching `config.json`.
 
-## 项目结构
+## Project Structure
 
 ```
 tracker/
-├── main.py              # 入口：托盘 + 定时器 + 调度
-├── config.py            # config.json 读写 + 默认配置
-├── storage.py           # SQLite 数据库 CRUD
-├── monitor.py           # 前台窗口轮询
-├── classifier.py        # 按规则分类
-├── idle_detector.py     # 空闲/视频检测
-├── icon_extractor.py    # 程序图标提取 + 磁盘缓存
-├── stats_html.py        # HTML 统计页面生成 + HTTP 服务
-├── tray.py              # 系统托盘（QSystemTrayIcon）
+├── main.py              # Entry: tray + timer + orchestration
+├── config.py            # config.json read/write + defaults
+├── storage.py           # SQLite CRUD
+├── monitor.py           # Foreground window polling
+├── classifier.py        # Rule-based window classification
+├── idle_detector.py     # Idle + video detection
+├── icon_extractor.py    # Program icon extraction + disk cache
+├── stats_html.py        # HTML stats page generator + HTTP server
+├── tray.py              # System tray (QSystemTrayIcon)
 ├── requirements.txt
-└── tests/               # pytest 测试
+└── tests/               # pytest suite (17 tests)
 ```
 
-## 技术栈
+## Tech Stack
 
-| 组件 | 方案 |
-|------|------|
-| GUI 框架 | PySide6 (Qt for Python) |
-| 数据库 | SQLite |
-| 统计图表 | Chart.js (嵌入式 HTTP 服务) |
-| 图标提取 | Windows SHGetFileInfo API |
-| 打包 | PyInstaller |
+| Component | Choice |
+|-----------|--------|
+| Runtime | Python 3.13 |
+| GUI | PySide6 (Qt for Python) — system tray only |
+| Database | SQLite (WAL mode) |
+| Charts | Chart.js via local HTTP server |
+| Icon extraction | Windows SHGetFileInfo API |
+| Packaging | PyInstaller (single-file exe) |
 
-## 许可证
+## License
 
 MIT
