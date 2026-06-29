@@ -18,7 +18,15 @@ def _icon_svg(letter: str, color: str, size: int = 20) -> str:
 def _add_icons(items):
     for item in items:
         label = item.get("label") or item.get("process", "")
-        letter = (os.path.splitext(label)[0] or "?")[0].upper()
+        process = item.get("process") or item.get("hk") or ""
+        # Try real icon (disk-cached) for items that have a process name
+        if process:
+            uri = icon_extractor.get_icon_uri(process)
+            if uri:
+                item["icon_uri"] = uri
+                continue
+        # Fallback to letter SVG
+        letter = (os.path.splitext(process or label)[0] or "?")[0].upper()
         item["icon_uri"] = _icon_svg(letter, item.get("color", "#888"))
     return items
 
@@ -56,14 +64,19 @@ def generate():
         cat = s["category"]
         dur = s["duration"]
         idle_cat_today[cat] = idle_cat_today.get(cat, 0) + dur
+        proc_name = s["process"] or ""
+        if proc_name and proc_name != "(无)":
+            icon_uri = icon_extractor.get_icon_uri(proc_name) or _icon_svg("视", "#8B5CF6")
+        else:
+            icon_uri = _icon_svg("空"[0] if cat == "空闲" else "视", "#6B7280" if cat == "空闲" else "#8B5CF6")
         idle_timeline.append({
-            "process": s["process"] or "(无)",
+            "process": proc_name or "(无)",
             "window_title": s["window_title"] or (f"[{cat}]" if cat == "视频" else "[无操作]"),
             "category": cat,
             "color": "#6B7280" if cat == "空闲" else "#8B5CF6",
             "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(s["started_at"])),
             "duration": dur,
-            "icon_uri": _icon_svg("空"[0] if cat == "空闲" else "视", "#6B7280" if cat == "空闲" else "#8B5CF6"),
+            "icon_uri": icon_uri,
         })
 
     # Merge into today's category stats
@@ -204,12 +217,7 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
 .mo-box .tbl select{width:auto}
 .mo-box .tbl input:focus,.mo-box .tbl select:focus{outline:none;border-color:#D4956B}
 
-/* ── Timeline view ── */
-.sub-tabs{display:flex;gap:4px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #2E3039}
-.stb{padding:4px 14px;font-size:12px;font-family:inherit;color:#9B958A;cursor:pointer;border:none;background:transparent;border-radius:4px;transition:all .1s}
-.stb:hover{color:#EAE4D9;background:#24262E}
-.stb.active{background:#2E3039;color:#D4956B;font-weight:500}
-.tl-container{width:100%;user-select:none}
+/* ── Timeline view ── */.tl-container{width:100%;user-select:none}
 .tl-header{position:relative;height:30px;margin-bottom:4px;overflow:hidden}
 .tl-ruler{position:absolute;left:0;top:0;height:30px;width:2400px;transform-origin:left center;border-bottom:1px solid #2E3039}
 .tl-ruler .rk{position:absolute;top:18px;font-size:10px;color:#5E5A54;transform:translateX(-50%);white-space:nowrap}
@@ -248,11 +256,6 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
     <button class="btn-gear" id="gearBtn" title="设置">&#9881;</button>
   </div>
   <div class="content">
-    <div class="sub-tabs" id="viewTabs">
-      <button class="stb active" data-v="stats">统计</button>
-      <button class="stb" data-v="list">时间线</button>
-      <button class="stb" data-v="timeline">时间轴</button>
-    </div>
     <div id="statsView">
       <div class="toolbar">
         <span class="tl">视图</span>
@@ -266,22 +269,12 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
         <div class="chart-box"><canvas id="chartCanvas"></canvas></div>
         <div class="breakdown" id="breakdownList"></div>
       </div>
-      <div class="footer">
-        <button class="btn" id="exportBtn">导出 CSV</button>
-      </div>
     </div>
 
-    <!-- List view -->
-    <div id="listView" style="display:none">
-      <div class="sl">时间线</div>
-      <div id="timelineList"></div>
-      <div class="footer" style="margin-top:16px">
-        <button class="btn" id="exportBtn2">导出 CSV</button>
-      </div>
-    </div>
+    <div class="sl">时间线</div>
+    <div id="timelineList"></div>
 
-    <!-- Timeline tab content -->
-    <div id="timelineView" style="display:none">
+    <div id="timelineView">
       <div class="tl-container">
         <div class="tl-header">
           <div class="tl-ruler" id="tlRuler"></div>
@@ -298,6 +291,10 @@ body{background:#16181D;color:#EAE4D9;font-family:'Segoe UI','Microsoft YaHei',s
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="footer">
+      <button class="btn" id="exportBtn">导出 CSV</button>
     </div>
   </div>
 </div>
@@ -650,7 +647,6 @@ function updateZoomLabel(){
 
 /* ── Zoom with wheel ── */
 document.getElementById('tlBody')?.addEventListener('wheel',function(e){
-  if(document.getElementById('timelineView').style.display==='none')return;
   e.preventDefault();
   var rect=this.getBoundingClientRect();
   var mouseX=e.clientX-rect.left;  /* mouse position relative to viewport */
@@ -672,7 +668,6 @@ document.getElementById('tlBody')?.addEventListener('wheel',function(e){
 /* ── Pan with drag ── */
 var body=document.getElementById('tlBody');
 body?.addEventListener('mousedown',function(e){
-  if(document.getElementById('timelineView').style.display==='none')return;
   if(e.button!==0||e.target.closest('.tl-block'))return;  /* allow click on blocks */
   TL.isDragging=true;
   TL.dragStartX=e.clientX;
@@ -726,34 +721,8 @@ document.getElementById('timeTabs').addEventListener('click',function(e){
   t.classList.add('active');
   state.range=t.dataset.r;state.drill=null;state.hlKey=null;
   document.getElementById('bread').style.display='none';
-  switchView(state.subTab);
+  refresh();
 });
-
-/* ── View sub-tab switching: 统计 / 时间线 / 时间轴 ── */
-document.getElementById('viewTabs').addEventListener('click',function(e){
-  var b=e.target.closest('.stb');if(!b||!b.dataset.v)return;
-  document.querySelectorAll('#viewTabs .stb').forEach(function(x){x.classList.remove('active');});
-  b.classList.add('active');
-  state.subTab=b.dataset.v;
-  switchView(state.subTab);
-});
-
-function switchView(view){
-  var sv=document.getElementById('statsView');
-  var lv=document.getElementById('listView');
-  var tv=document.getElementById('timelineView');
-  sv.style.display='none';lv.style.display='none';tv.style.display='none';
-  if(view==='stats'){
-    sv.style.display='';
-    refresh();
-  }else if(view==='list'){
-    lv.style.display='';
-    renderTL();
-  }else if(view==='timeline'){
-    tv.style.display='';
-    renderTimelineChart();
-  }
-}
 document.querySelector('#app .toolbar').addEventListener('click',function(e){
   var b=e.target.closest('.tb');if(!b)return;
   b.parentElement.querySelectorAll('.tb').forEach(function(x){x.classList.remove('active');});b.classList.add('active');
@@ -800,11 +769,12 @@ document.getElementById('saveConfigBtn').onclick=function(){
     });
 };
 
-switchView('stats');
+/* ── Initialize on page load ── */
+refresh();
+renderTimelineChart();
 
-/* Export CSV for both views */
+/* ── Export CSV ── */
 document.getElementById('exportBtn').onclick=exportCSV;
-var eb2=document.getElementById('exportBtn2');if(eb2)eb2.onclick=exportCSV;
 
 function exportCSV(){
   var rows=DATA.timeline||[],csv='\ufeff\u8fdb\u7a0b,\u7a97\u53e3\u6807\u9898,\u5206\u7c7b,\u5f00\u59cb\u65f6\u95f4,\u65f6\u957f(\u79d2)\n';

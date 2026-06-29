@@ -1,7 +1,8 @@
-"""Extract program icons from .exe via SHGetFileInfo, with fallback letter icons."""
-import ctypes, ctypes.wintypes, os, hashlib
+"""Extract program icons from .exe via SHGetFileInfo, with fallback letter icons.
+Png cache saved to icons/ directory next to config/db for portable reuse."""
+import ctypes, ctypes.wintypes, os, hashlib, sys, base64
 from PySide6.QtGui import QPixmap, QColor, QPainter, QFont
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice
 
 SHGFI_ICON = 0x000000100; SHGFI_SMALLICON = 0x000000001; MAX_PATH = 260
 
@@ -15,6 +16,24 @@ FALLBACK_COLORS = {
 
 _icon_cache = {}; _color_cache = {}
 
+
+def _base_dir() -> str:
+    """Portable base dir: exe dir when frozen, else script dir."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _icon_cache_dir() -> str:
+    """icons/ directory next to config/db; created lazily."""
+    d = os.path.join(_base_dir(), "icons")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _cached_icon_path(process_name: str) -> str:
+    return os.path.join(_icon_cache_dir(), f"{process_name.lower()}.png")
+
 def _find_exe_path(process_name: str) -> str | None:
     pn = process_name.lower()
     known = {
@@ -24,6 +43,14 @@ def _find_exe_path(process_name: str) -> str | None:
     }
     if pn in known and os.path.exists(known[pn]):
         return known[pn]
+    # Search PATH directories
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+    for d in path_dirs:
+        d = d.strip('"')
+        if not d: continue
+        candidate = os.path.join(d, process_name)
+        if os.path.isfile(candidate):
+            return candidate
     return None
 
 class _SHFILEINFO(ctypes.Structure):
@@ -74,6 +101,48 @@ def _gen_letter(process_name: str, size: int):
     p.setFont(QFont("Segoe UI", int(size*0.5), QFont.Bold))
     p.drawText(0, 0, size, size, Qt.AlignCenter, letter)
     p.end(); return pm
+
+
+def get_icon_uri(process_name: str, size: int = 20) -> str | None:
+    """Return a data URI (png) for the given process.
+
+    Checks disk cache first (icons/<process>.png), then extracts via
+    SHGetFileInfo and caches the result so subsequent lookups are instant.
+    Returns None when extraction fails (caller falls back to letter SVG).
+    """
+    name = process_name.lower()
+    cache_path = _cached_icon_path(name)
+
+    # 1. Disk cache hit — read and return
+    if os.path.isfile(cache_path):
+        try:
+            with open(cache_path, "rb") as f:
+                return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
+        except Exception:
+            pass  # corrupted file; re-extract
+
+    # 2. Extract icon via Qt / SHGetFileInfo
+    pm = get_icon_pixmap(name, size)
+    if pm is None or pm.isNull():
+        return None
+
+    # 3. Serialise to PNG bytes
+    ba = QByteArray()
+    buf = QBuffer(ba)
+    buf.open(QIODevice.WriteOnly)
+    pm.save(buf, "PNG")
+    buf.close()
+    png_bytes = bytes(ba)
+
+    # 4. Save to disk cache (best-effort)
+    try:
+        with open(cache_path, "wb") as f:
+            f.write(png_bytes)
+    except Exception:
+        pass
+
+    return f"data:image/png;base64,{base64.b64encode(png_bytes).decode()}"
+
 
 def clear_cache():
     _icon_cache.clear(); _color_cache.clear()
