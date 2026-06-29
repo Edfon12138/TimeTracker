@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import config as cfg, storage, monitor, idle_detector, classifier, stats_html
+import config as cfg, storage, monitor, idle_detector, classifier, tray, stats_html
 
 class TimeTracker:
     def __init__(self, app):
