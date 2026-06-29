@@ -5,12 +5,11 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import config as cfg, storage, monitor, idle_detector, classifier, tray
-from stats_window import StatsWindow
+import config as cfg, storage, monitor, idle_detector, classifier, tray, stats_html
 
 class TimeTracker:
     def __init__(self, app):
-        self._app = app; self._config = cfg.load_config(); self._stats = None; self._paused = False
+        self._app = app; self._config = cfg.load_config(); self._paused = False
         db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracker.db")
         storage.init_db(db)
         if self._config.get("retention_days", 90) > 0:
@@ -44,8 +43,7 @@ class TimeTracker:
         self._tray.update_tooltip(f"{sta} · 今日 {t//3600}h {(t%3600)//60}m")
 
     def _open_stats(self):
-        if not self._stats: self._stats = StatsWindow()
-        self._stats.show(); self._stats.raise_(); self._stats.activateWindow()
+        stats_html.generate()
 
     def _toggle_pause(self):
         self._paused = not self._paused; monitor.set_paused(self._paused)
