@@ -1,0 +1,31 @@
+{
+  "min_duration_sec": 5,
+  "idle_timeout_min": 5,
+  "retention_days": 90,
+  "autostart": false,
+  "export_path": "",
+  "categories": {
+    "工作": {"color": "#7BA78E"},
+    "娱乐": {"color": "#D4956B"},
+    "浏览": {"color": "#7B9EC7"},
+    "通讯": {"color": "#A78BB5"},
+    "系统": {"color": "#6B6B6B"},
+    "其他": {"color": "#5A5A5A"}
+  },
+  "rules": [
+    {"process": "Code.exe", "title_pattern": null, "category": "工作"},
+    {"process": "devenv.exe", "title_pattern": null, "category": "工作"},
+    {"process": "WindowsTerminal.exe", "title_pattern": null, "category": "工作"},
+    {"process": "chrome.exe", "title_pattern": "GitHub|Jira|Stack Overflow", "category": "工作"},
+    {"process": "chrome.exe", "title_pattern": "YouTube|Netflix|Bilibili", "category": "娱乐"},
+    {"process": "steam.exe", "title_pattern": null, "category": "娱乐"},
+    {"process": "WeChat.exe", "title_pattern": null, "category": "通讯"},
+    {"process": "QQ.exe", "title_pattern": null, "category": "通讯"},
+    {"process": "explorer.exe", "title_pattern": null, "category": "系统"}
+  ],
+  "defaults": {
+    "chrome.exe": "浏览",
+    "msedge.exe": "浏览",
+    "firefox.exe": "浏览"
+  }
+}
